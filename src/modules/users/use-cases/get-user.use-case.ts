@@ -10,8 +10,8 @@ export class GetUserUseCase {
     private readonly userRepository: IUserRepository
   ) {}
 
-  async execute(userId: string): Promise<User> {
-    const user = await this.userRepository.findById(userId);
+  async execute(userId: number): Promise<User> {
+    const user = await this.userRepository.findByUserId(userId!);
     if (!user) {
       throw new NotFoundException('User not found');
     }

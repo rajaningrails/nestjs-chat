@@ -17,42 +17,40 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<FastifyReply>();
     const request = ctx.getRequest<FastifyRequest>();
 
-    let status: number;
-    let message: string | object;
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let message = 'Internal server error';
+    let errors: any = null;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
-      message =
-        typeof exceptionResponse === 'string'
-          ? exceptionResponse
-          : exceptionResponse;
-    } else {
-      status = HttpStatus.INTERNAL_SERVER_ERROR;
-      message = 'Internal server error';
 
-      // Log unexpected errors
-      this.logger.error(
-        `Unexpected error: ${exception}`,
-        exception instanceof Error ? exception.stack : undefined,
-      );
+      if (typeof exceptionResponse === 'string') {
+        message = exceptionResponse;
+      } else if (typeof exceptionResponse === 'object') {
+        const res: any = exceptionResponse;
+
+        message = res.message ?? message;
+
+        if (Array.isArray(res.message)) {
+          message = 'Validation failed';
+          errors = res.message;
+        } else if (res.errors) {
+          errors = res.errors;
+        }
+      }
+    } else if (exception instanceof Error) {
+      this.logger.error(exception.message, exception.stack);
     }
 
-    const errorResponse =
-      typeof message === 'string'
-        ? {
-            status: status,
-            message,
-          }
-        : {
-            ...(message as object),
-          };
-
-    this.logger.error(
-      `HTTP Exception: ${request.method} ${request.url}`,
-      JSON.stringify(errorResponse),
-    );
-
+    const errorResponse = {
+      statusCode: status,
+      message,
+      errors,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+    };
+    
     response.status(status).send(errorResponse);
   }
 }

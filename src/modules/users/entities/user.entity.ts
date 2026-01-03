@@ -1,21 +1,42 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  Unique,
+  Index,
+} from 'typeorm';
+import { UserType } from '../dto/user-type.enum';
 
 @Entity('users')
+@Unique('unique_user', ['school_id', 'user_id'])
+@Index('idx_user_id', ['user_id'])
 export class User {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ unique: true })
-  @Column({ nullable: true })
-  email: string;
+  @Column({ type: 'int' })
+  school_id: number;
 
-  @Column()
-  @Column({ nullable: true })
-  name: string;
+  @Column({ type: 'int' })
+  user_id: number;
 
-  @CreateDateColumn()
-  createdAt: Date;
+  @Column({ type: 'text', nullable: true })
+  name?: string;
 
-  @UpdateDateColumn()
-  updatedAt: Date;
+  @Column({ type: 'text', nullable: true })
+  image?: string;
+
+  @Column({
+    type: 'enum',
+    enum: UserType,
+  })
+  type: UserType;
+
+  @CreateDateColumn({ name: 'created_at' })
+  created_at: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updated_at: Date;
 }

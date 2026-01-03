@@ -30,7 +30,7 @@ export class TransformInterceptor<T>
       map((data) => ({
         statusCode: response.statusCode,
         message: 'Request processed successfully',
-        ...data,
+        data,
         timestamp: new Date().toISOString(),
       })),
     );

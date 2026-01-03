@@ -5,8 +5,8 @@ import { UserController } from './users.controller';
 import { IUserRepositoryToken } from './repositories/user.repository.interface';
 import { CreateUserUseCase } from './use-cases/create-user.use-case';
 import { GetUserUseCase } from './use-cases/get-user.use-case';
-import { GetUsersUseCase } from './use-cases/get-users.use-case';
 import { UserRepository } from './repositories/user.repository';
+import { UpdateUserUseCase } from './use-cases/update-user.use-case';
 
 @Module({
   imports: [TypeOrmModule.forFeature([User])],
@@ -18,7 +18,7 @@ import { UserRepository } from './repositories/user.repository';
     },
     CreateUserUseCase,
     GetUserUseCase,
-    GetUsersUseCase,
+    UpdateUserUseCase,
     UserRepository
   ],
   exports: [IUserRepositoryToken,CreateUserUseCase,UserRepository],

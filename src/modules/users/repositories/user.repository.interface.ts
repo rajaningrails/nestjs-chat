@@ -3,8 +3,7 @@ import { User } from "../entities/user.entity";
 export const IUserRepositoryToken = Symbol('IUserRepository');
 export interface IUserRepository {
   findAll(): Promise<User[]>;
-  findById(id: string): Promise<User | null>;
-  findByEmail(email: string): Promise<User | null>;
+  findByUserId(user_id:number): Promise<User | null>;
   create(userData: Partial<User>): Promise<User>;
-  update(id: string, userData: Partial<User>): Promise<User | null>;
+  update(user_id: number, userData: Partial<User>): Promise<User | null>;
 }

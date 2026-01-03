@@ -1,0 +1,31 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 60
+      arrivalRate: 50
+      name: "Warm up"
+    - duration: 300
+      arrivalRate: 100
+      name: "Sustained load"
+  socketio:
+    transports: ["websocket"]
+
+scenarios:
+  - name: "Send messages"
+    engine: socketio
+    flow:
+      - emit:
+          channel: "join-conversation"
+          data:
+            conversation_id: 1
+            user_id: "{{ $randomNumber(1, 1000) }}"
+      - think: 2
+      - loop:
+          - emit:
+              channel: "send-message"
+              data:
+                sender_id: "{{ $randomNumber(1, 1000) }}"
+                conversation_id: 1
+                message: "Test message {{ $randomString() }}"
+          - think: 5
+        count: 10

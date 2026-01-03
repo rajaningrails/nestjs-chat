@@ -5,17 +5,16 @@ module.exports = {
       script: './dist/main.js',
       
       instances: 4, // Number of instances (use 4 for 4-core CPU)
-      exec_mode: 'cluster', // Enable cluster mode
+      exec_mode: 'cluster',
       
       max_memory_restart: '900M', // Restart if memory exceeds 900MB
       
       // Auto-restart configuration
       autorestart: true,
-      watch: false, // Don't watch in production
+      watch: false,
       max_restarts: 10,
       min_uptime: '10s',
       
-      // Environment variables
       env: {
         NODE_ENV: 'development',
         PORT: 3000,
@@ -49,7 +48,6 @@ module.exports = {
       listen_timeout: 10000,
       shutdown_with_message: true,
       
-      // Node.js options
       node_args: '--max-old-space-size=512', // 512MB heap per worker
     },
   ],

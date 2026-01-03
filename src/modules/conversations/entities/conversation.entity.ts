@@ -6,42 +6,58 @@ import {
   UpdateDateColumn,
   Index,
 } from 'typeorm';
+import { ConversationType, GroupType } from '../dto/conversations.enum';
 
 @Entity('conversations')
+@Index(['school_id'])
+@Index(['type'])
+@Index(['group_id'])
 export class Conversation {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn({ type: 'bigint' })
+  id: number;
 
-  @Index()
   @Column({ type: 'int' })
-  sender_id: number;
+  school_id: number;
 
-  @Index()
-  @Column({ type: 'int' })
-  receiver_id: number;
-
-  @Index()
   @Column({ type: 'int', nullable: true })
   group_id: number | null;
 
-  @Index({ unique: true })
-  @Column({ type: 'bigint' })
-  message_id: number;
+  @Column({
+    type: 'enum',
+    enum: ConversationType,
+  })
+  type: ConversationType;
 
-  @Column({ type: 'text' })
-  message: string;
+  @Column({
+    type: 'enum',
+    enum: GroupType,
+    nullable: true,
+  })
+  group_type: GroupType | null;
 
-  @Column({ type: 'boolean', default: false })
-  message_deleted: boolean;
+  /* ---------- last message cache ---------- */
+
+  @Column({ type: 'bigint', nullable: true })
+  last_message_id: number | null;
+
+  @Column({ type: 'text', nullable: true })
+  last_message: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  last_message_sender_id: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  last_message_receiver_id: number | null;
 
   @Column({ type: 'timestamp', nullable: true })
-  message_seen: Date | null;
+  last_message_seen_at: Date | null;
 
-  @CreateDateColumn({ type: 'timestamp' })
-  createdAt: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
-  updatedAt: Date;
+  @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
+  created_at: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
+  updated_at: Date;
 }
 
 export default Conversation;

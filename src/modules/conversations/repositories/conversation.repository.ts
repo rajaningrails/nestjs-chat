@@ -19,12 +19,12 @@ export class ConversationRepository implements IConversationRepository {
       take: limit,
       skip: offset,
       order: {
-        createdAt: 'DESC',
+        created_at: 'DESC',
       },
     });
   }
 
-  async findById(id: string): Promise<Conversation | null> {
+  async findById(id: number): Promise<Conversation | null> {
     return this.conversationRepository.findOne({ where: { id } });
   }
 
@@ -34,7 +34,7 @@ export class ConversationRepository implements IConversationRepository {
   }
 
   async update(
-    id: string,
+    id: number,
     conversationData: Partial<Conversation>,
   ): Promise<Conversation | null> {
     await this.conversationRepository.update(id, conversationData);

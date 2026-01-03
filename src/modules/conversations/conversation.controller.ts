@@ -7,7 +7,7 @@ import {
   Query,
   ParseIntPipe,
 } from '@nestjs/common';
-import { ConversationDto } from './dto/conversation.dto';
+import { CreateConversationDto } from './dto/create-conversation.dto';
 import { ConversationRepository } from './repositories/conversation.repository';
 
 @Controller('conversations')
@@ -17,7 +17,7 @@ export class ConversationController {
   ) {}
 
   @Post()
-  async create(@Body() conversation: ConversationDto) {
+  async create(@Body() conversation: CreateConversationDto) {
     return this.conversationRepository.save(conversation);
   }
 
@@ -30,7 +30,7 @@ export class ConversationController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: number) {
     return this.conversationRepository.findById(id);
   }
 }

@@ -15,6 +15,8 @@ import { SocketModule } from './infrastructure/socket/socket.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ThrottleModule } from './common/throttler/throttler.module';
+import { APP_GUARD } from '@nestjs/core';
+import { HmacAuthGuard } from './common/guard/hmac-auth.guard';
 
 @Module({
   imports: [
@@ -30,7 +32,7 @@ import { ThrottleModule } from './common/throttler/throttler.module';
 
     // Database
     DatabaseModule,
-    
+
     // Common utilities
     SocketModule,
     RedisModule,
@@ -45,6 +47,12 @@ import { ThrottleModule } from './common/throttler/throttler.module';
     MessageModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: HmacAuthGuard, // for authentication of incoming requests
+    },
+  ],
 })
 export class AppModule {}

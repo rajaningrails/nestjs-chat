@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { Public } from 'src/common/decorators/public.decorator';
 
 @Controller('health')
 export class HealthController {
@@ -9,6 +10,7 @@ export class HealthController {
   ) {}
 
   @Get()
+  @Public()
   async check() {
     const queueStats = await this.messageQueue.getJobCounts();
     

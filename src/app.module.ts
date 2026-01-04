@@ -14,6 +14,7 @@ import { HealthModule } from './modules/health/health.module';
 import { SocketModule } from './infrastructure/socket/socket.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { ThrottleModule } from './common/throttler/throttler.module';
 
 @Module({
   imports: [
@@ -29,12 +30,13 @@ import { AppService } from './app.service';
 
     // Database
     DatabaseModule,
+    
+    // Common utilities
+    SocketModule,
     RedisModule,
     QueueModule,
-    SocketModule,
-
-    // Common utilities
     CommonModule,
+    ThrottleModule,
 
     // Feature modules
     HealthModule,

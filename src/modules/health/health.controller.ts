@@ -13,8 +13,6 @@ export class HealthController {
     const queueStats = await this.messageQueue.getJobCounts();
     
     return {
-      status: 'ok',
-      timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       process: {
         pid: process.pid,

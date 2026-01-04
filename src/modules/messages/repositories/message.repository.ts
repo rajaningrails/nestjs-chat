@@ -74,7 +74,6 @@ export class MessageRepository implements IMessageRepository {
         .values(messages)
         .execute();
     } catch (error) {
-      // Let the caller handle fallback if needed
       throw error;
     }
   }

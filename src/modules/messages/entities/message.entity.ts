@@ -8,8 +8,8 @@ import {
   Index,
   ManyToOne,
   JoinColumn,
+  PrimaryColumn,
 } from 'typeorm';
-import { MessageType } from '../dto/message.dto';
 import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
@@ -23,8 +23,8 @@ import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
 @Index('idx_conversation_created', ['conversation_id', 'created_at'])
 @Index('idx_seen_at', ['seen_at'])
 export class Message {
-  @PrimaryGeneratedColumn({ type: 'bigint' })
-  id: bigint;
+  @PrimaryColumn('varchar', { length: 36 })
+  id: string;
 
   @Column({ type: 'bigint', nullable: false })
   conversation_id: bigint;
@@ -51,13 +51,6 @@ export class Message {
 
   @Column({ type: 'text', nullable: true })
   attachments: string | null;
-
-  @Column({
-    type: 'enum',
-    enum: MessageType,
-    default: MessageType.TEXT,
-  })
-  message_type: MessageType;
 
   @Column({ type: 'timestamp', nullable: true })
   seen_at: Date | null;

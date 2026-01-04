@@ -14,6 +14,7 @@ import { IMessageRepositoryToken } from './repositories/message.repository.inter
 import { MessageService } from './services/message.service';
 import { MessageDto } from './dto/message.dto';
 import { SkipThrottle } from '@nestjs/throttler';
+import { CreateMessageDto } from './dto/create-message.dto';
 
 @Controller('messages')
 export class MessageController {
@@ -27,6 +28,11 @@ export class MessageController {
   @Post('send')
   async sendMessage(@Body() dto: MessageDto) {
     return this.messageService.sendMessage(dto);
+  }
+
+  @Post('create-message')
+  async createMessageConnection(@Body() dto: CreateMessageDto) {
+    return this.messageService.createMessageConnection(dto);
   }
 
   // @Post('seen')

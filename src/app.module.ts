@@ -49,10 +49,10 @@ import { HmacAuthGuard } from './common/guard/hmac-auth.guard';
   controllers: [AppController],
   providers: [
     AppService,
-    {
-      provide: APP_GUARD,
-      useClass: HmacAuthGuard, // for authentication of incoming requests
-    },
+    // {
+    //   provide: APP_GUARD,
+    //   useClass: HmacAuthGuard, // for authentication of incoming requests
+    // },
   ],
 })
 export class AppModule {}

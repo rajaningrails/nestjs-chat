@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { IUserRepository } from './user.repository.interface';
 import { User } from '../entities/user.entity';
 
@@ -27,5 +27,21 @@ export class UserRepository implements IUserRepository {
   async update(user_id: number, userData: Partial<User>): Promise<User | null> {
     await this.userRepository.update(user_id, userData);
     return this.findByUserId(user_id);
+  }
+
+  async upsertUser(
+    userData: Partial<User>,
+    manager?: EntityManager,
+  ): Promise<void> {
+    const repo = manager ? manager.getRepository(User) : this.userRepository;
+    const existing = await repo.findOne({
+      where: {
+        user_id: userData.user_id,
+      },
+    });
+    if (existing) {
+      return;
+    }
+    await repo.upsert(userData, ['user_id', 'school_id']);
   }
 }

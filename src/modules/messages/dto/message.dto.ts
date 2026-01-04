@@ -2,15 +2,10 @@ import {
   IsNotEmpty,
   IsInt,
   IsString,
-  IsEnum,
   IsOptional,
   ValidateIf,
+  IsArray,
 } from 'class-validator';
-
-export enum MessageType {
-  TEXT = 'text',
-  FILE = 'file',
-}
 
 export class MessageDto {
   @IsInt()
@@ -32,20 +27,14 @@ export class MessageDto {
   @IsInt()
   conversation_id: number;
 
-  @IsOptional()
-  @IsInt()
-  chat_reply_id?: number;
-
-  @ValidateIf(o => o.message_type === MessageType.TEXT)
-  @IsNotEmpty()
+  @ValidateIf(o => !o.attachments || o.attachments.length === 0)
   @IsString()
+  @IsNotEmpty()
   message?: string;
 
-  @ValidateIf(o => o.message_type === MessageType.FILE)
+  @ValidateIf(o => !o.message)
+  @IsArray()
+  @IsString({ each: true })
   @IsNotEmpty()
-  @IsString()
-  attachments?: string;
-
-  @IsEnum(MessageType)
-  message_type: MessageType;
+  attachments?: string[];
 }

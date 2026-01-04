@@ -23,7 +23,7 @@ export class MessageService {
       group_id: dto.group_id || null,
       conversation_id: dto.conversation_id,
       message: dto.message,
-      images: dto.images || null,
+      images: dto.attachments || null,
       message_type: dto.message_type || 'text',
       createdAt: new Date(),
     };

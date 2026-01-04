@@ -59,7 +59,7 @@ export class MessageController {
   }
 
   @Get(':id')
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
+  async findOne(@Param('id', ParseUUIDPipe) id: number) {
     return this.messageRepository.findById(id);
   }
 }

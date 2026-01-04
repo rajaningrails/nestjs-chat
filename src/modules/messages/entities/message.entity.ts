@@ -6,17 +6,31 @@ import {
   UpdateDateColumn,
   DeleteDateColumn,
   Index,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
-
-export enum MessageType {
-  TEXT = 'text',
-  FILE = 'file',
-}
+import { MessageType } from '../dto/message.dto';
+import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
+import { User } from 'src/modules/users/entities/user.entity';
+import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
 
 @Entity('messages')
+@Index('idx_conversation_id', ['conversation_id'])
+@Index('idx_school_id', ['school_id'])
+@Index('idx_sender_id', ['sender_id'])
+@Index('idx_group_id', ['group_id'])
+@Index('idx_created_at', ['created_at'])
+@Index('idx_conversation_created', ['conversation_id', 'created_at'])
+@Index('idx_seen_at', ['seen_at'])
 export class Message {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn({ type: 'bigint' })
+  id: bigint;
+
+  @Column({ type: 'bigint', nullable: false })
+  conversation_id: bigint;
+
+  @Column({ type: 'int' })
+  school_id: number;
 
   @Column({ type: 'int' })
   sender_id: number;
@@ -27,15 +41,16 @@ export class Message {
   @Column({ type: 'int', nullable: true })
   group_id: number | null;
 
-  @Index()
-  @Column({ type: 'int', nullable: false })
-  conversation_id: number | null;
+  @Column({
+    type: 'text',
+    charset: 'utf8mb4',
+    collation: 'utf8mb4_unicode_ci',
+    nullable: true,
+  })
+  message: string | null;
 
-  @Column({ type: 'text' })
-  message: string;
-
-  @Column({ type: 'json', nullable: true })
-  images: string[] | null;
+  @Column({ type: 'text', nullable: true })
+  attachments: string | null;
 
   @Column({
     type: 'enum',
@@ -45,14 +60,37 @@ export class Message {
   message_type: MessageType;
 
   @Column({ type: 'timestamp', nullable: true })
-  seenAt: Date | null;
+  seen_at: Date | null;
 
-  @DeleteDateColumn({ type: 'timestamp' })
-  deletedAt: Date | null;
+  @DeleteDateColumn({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  deleted_at: Date | null;
+
+  @Column({ name: 'removed_at', type: 'timestamp', nullable: true })
+  removed_at: Date | null;
 
   @CreateDateColumn({ type: 'timestamp' })
-  createdAt: Date;
+  created_at: Date;
 
   @UpdateDateColumn({ type: 'timestamp' })
-  updatedAt: Date;
+  updated_at: Date;
+
+  // Relations
+  @ManyToOne(() => Conversation, (conversation) => conversation.messages, { 
+    nullable: false,
+    onDelete: 'CASCADE'
+  })
+  @JoinColumn({ name: 'conversation_id', referencedColumnName: 'id' })
+  conversation: Conversation;
+
+  @ManyToOne(() => User, { nullable: false })
+  @JoinColumn({ name: 'sender_id', referencedColumnName: 'user_id' })
+  sender: User;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'receiver_id', referencedColumnName: 'user_id' })
+  receiver?: User | null;
+
+  @ManyToOne(() => ChatGroup, { nullable: true })
+  @JoinColumn({ name: 'group_id', referencedColumnName: 'id' })
+  group?: ChatGroup | null;
 }

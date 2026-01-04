@@ -6,8 +6,10 @@ import {
   UpdateDateColumn,
   Unique,
   Index,
+  OneToMany,
 } from 'typeorm';
 import { UserType } from '../dto/user-type.enum';
+import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
 
 @Entity('users')
 @Unique('unique_user', ['school_id', 'user_id'])
@@ -39,4 +41,7 @@ export class User {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updated_at: Date;
+
+  @OneToMany(() => ChatGroup, (group) => group.creator)
+  createdGroups: ChatGroup[];
 }

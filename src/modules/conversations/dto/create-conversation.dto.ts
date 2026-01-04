@@ -39,7 +39,7 @@ export class CreateConversationDto {
 
   @IsOptional()
   @IsInt()
-  last_message_receiver_id?: number; // null in case of group
+  last_message_receiver_id?: number;
 
   @IsOptional()
   @IsDateString()

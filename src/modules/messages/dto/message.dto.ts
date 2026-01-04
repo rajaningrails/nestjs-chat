@@ -3,8 +3,7 @@ import {
   IsInt,
   IsString,
   IsEnum,
-  IsArray,
-  IsUUID,
+  IsOptional,
   ValidateIf,
 } from 'class-validator';
 
@@ -15,18 +14,27 @@ export enum MessageType {
 
 export class MessageDto {
   @IsInt()
+  school_id: number;
+
+  @IsInt()
   sender_id: number;
 
   @ValidateIf(o => !o.group_id)
   @IsInt()
+  @IsOptional()
   receiver_id?: number;
 
   @ValidateIf(o => !o.receiver_id)
   @IsInt()
+  @IsOptional()
   group_id?: number;
 
-  @IsUUID()
+  @IsInt()
   conversation_id: number;
+
+  @IsOptional()
+  @IsInt()
+  chat_reply_id?: number;
 
   @ValidateIf(o => o.message_type === MessageType.TEXT)
   @IsNotEmpty()
@@ -34,9 +42,9 @@ export class MessageDto {
   message?: string;
 
   @ValidateIf(o => o.message_type === MessageType.FILE)
-  @IsArray()
-  @IsString({ each: true })
-  images?: string[];
+  @IsNotEmpty()
+  @IsString()
+  attachments?: string;
 
   @IsEnum(MessageType)
   message_type: MessageType;

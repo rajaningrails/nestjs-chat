@@ -31,13 +31,13 @@ export class MessageRepository implements IMessageRepository {
       where,
       take: limit,
       skip: offset,
-      order: { createdAt: 'DESC' },
+      order: { created_at: 'DESC' },
     });
   }
 
-  async findById(id: string): Promise<Message | null> {
+  async findById(id: any): Promise<Message | null> {
     return this.messageRepository.findOne({
-      where: { id },
+      where: { id},
     });
   }
 
@@ -55,7 +55,7 @@ export class MessageRepository implements IMessageRepository {
   }
 
   async markAsSeen(id: string, seenAt: Date = new Date()): Promise<void> {
-    await this.messageRepository.update(id, { seenAt });
+    await this.messageRepository.update(id, { seen_at: seenAt });
   }
 
   async softDelete(id: string): Promise<boolean> {

@@ -11,7 +11,7 @@ export interface IMessageRepository {
     offset?: number,
   ): Promise<Message[]>;
 
-  findById(id: string): Promise<Message | null>;
+  findById(id: number): Promise<Message | null>;
 
   save(messageData: Partial<Message>): Promise<Message>;
 

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { IConversationRepository } from './conversation.repository.interface';
-import Conversation from '../entities/conversation.entity';
+import { Conversation } from '../entities/conversation.entity';
 
 @Injectable()
 export class ConversationRepository implements IConversationRepository {
@@ -24,7 +24,7 @@ export class ConversationRepository implements IConversationRepository {
     });
   }
 
-  async findById(id: number): Promise<Conversation | null> {
+  async findById(id: any): Promise<Conversation | null> {
     return this.conversationRepository.findOne({ where: { id } });
   }
 

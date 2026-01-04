@@ -5,11 +5,18 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  ManyToOne,
+  JoinColumn,
+  Index,
 } from 'typeorm';
 import { ChatGroupMember } from './chat-group-member.entity';
 import { GroupMessageSeen } from './chat-group-message-seen.entity';
+import { User } from 'src/modules/users/entities/user.entity';
+import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
 
 @Entity('chat_groups')
+@Index('idx_school_id', ['school_id'])
+@Index('idx_created_by', ['created_by'])
 export class ChatGroup {
   @PrimaryGeneratedColumn()
   id: number;
@@ -33,9 +40,16 @@ export class ChatGroup {
   updated_at: Date;
 
 
-  @OneToMany(() => ChatGroupMember, (member) => member.group)
+  @ManyToOne(() => User, (user) => user.createdGroups, { nullable: false })
+  @JoinColumn({ name: 'created_by', referencedColumnName: 'user_id' })
+  creator: User;
+
+  @OneToMany(() => ChatGroupMember, (member) => member.group, { cascade: true })
   members: ChatGroupMember[];
 
   @OneToMany(() => GroupMessageSeen, (seen) => seen.group)
   seen_messages: GroupMessageSeen[];
+
+  @OneToMany(() => Conversation, (conversation) => conversation.group)
+  conversations: Conversation[];
 }

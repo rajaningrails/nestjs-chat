@@ -12,6 +12,8 @@ import { RedisModule } from './infrastructure/redis/redis.module';
 import { QueueModule } from './infrastructure/queue/queue.module';
 import { HealthModule } from './modules/health/health.module';
 import { SocketModule } from './infrastructure/socket/socket.module';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 
 @Module({
   imports: [
@@ -21,16 +23,16 @@ import { SocketModule } from './infrastructure/socket/socket.module';
       load: [databaseConfig],
       envFilePath: '.env',
     }),
-    
+
     // Logging
     WinstonModule.forRoot(loggerConfig),
-    
+
     // Database
     DatabaseModule,
     RedisModule,
     QueueModule,
     SocketModule,
-    
+
     // Common utilities
     CommonModule,
 
@@ -38,7 +40,9 @@ import { SocketModule } from './infrastructure/socket/socket.module';
     HealthModule,
     UsersModule,
     ConversationsModule,
-    MessageModule
+    MessageModule,
   ],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule {}

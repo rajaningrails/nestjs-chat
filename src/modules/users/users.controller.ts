@@ -20,7 +20,7 @@ export class UserController {
     return user;
   }
 
-  @Post()
+  @Post('update')
   async update(@Body() updateUserDto: UpdateUserDto): Promise<User> {
     const user = await this.updateUserUseCase.execute(updateUserDto);
     return user!;

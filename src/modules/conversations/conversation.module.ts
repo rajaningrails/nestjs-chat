@@ -4,6 +4,7 @@ import { ConversationController } from './conversation.controller';
 import { IConversationRepositoryToken } from './repositories/conversation.repository.interface';
 import { ConversationRepository } from './repositories/conversation.repository';
 import { Conversation } from './entities/conversation.entity';
+import { ConversationService } from './services/conversation.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Conversation])],
@@ -13,7 +14,8 @@ import { Conversation } from './entities/conversation.entity';
       provide: IConversationRepositoryToken,
       useClass: ConversationRepository,
     },
-    ConversationRepository
+    ConversationService,
+    ConversationRepository,
   ],
   exports: [IConversationRepositoryToken,ConversationRepository],
 })

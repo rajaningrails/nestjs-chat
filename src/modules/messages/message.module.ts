@@ -12,6 +12,7 @@ import { User } from '../users/entities/user.entity';
 import { Conversation } from '../conversations/entities/conversation.entity';
 import { UserRepository } from '../users/repositories/user.repository';
 import { ConversationRepository } from '../conversations/repositories/conversation.repository';
+import { ConversationService } from '../conversations/services/conversation.service';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { ConversationRepository } from '../conversations/repositories/conversati
     MessageService,
     MessageProcessor,
     MessageGateway,
+    ConversationService
   ],
   exports: [IMessageRepositoryToken, MessageRepository],
 })

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { IConversationRepository } from './conversation.repository.interface';
 import { Conversation } from '../entities/conversation.entity';
 import { toMySQLDate } from 'src/utils/helpers';
@@ -9,7 +9,6 @@ import { toMySQLDate } from 'src/utils/helpers';
 export class ConversationRepository implements IConversationRepository {
   constructor(
     @InjectRepository(Conversation)
-    private readonly dataSource: DataSource,
     private readonly conversationRepository: Repository<Conversation>,
   ) { }
 
@@ -113,7 +112,7 @@ export class ConversationRepository implements IConversationRepository {
    */
   async findByUserId(userId: number): Promise<Conversation[]> {
     try {
-      const conversations = await this.dataSource.query(
+      const conversations = await this.conversationRepository.query(
         `
         SELECT DISTINCT c.*
         FROM conversations c
@@ -159,7 +158,7 @@ export class ConversationRepository implements IConversationRepository {
     type: 'group' | 'user',
   ): Promise<Conversation[]> {
     try {
-      const conversations = await this.dataSource.query(
+      const conversations = await this.conversationRepository.query(
         `
       SELECT DISTINCT c.*
       FROM conversations c

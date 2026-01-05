@@ -17,6 +17,7 @@ import { AppService } from './app.service';
 import { ThrottleModule } from './common/throttler/throttler.module';
 import { APP_GUARD } from '@nestjs/core';
 import { HmacAuthGuard } from './common/guard/hmac-auth.guard';
+import { TasksModule } from './infrastructure/job/task.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { HmacAuthGuard } from './common/guard/hmac-auth.guard';
     QueueModule,
     CommonModule,
     ThrottleModule,
+    TasksModule,
 
     // Feature modules
     HealthModule,

@@ -10,7 +10,7 @@ export class ConversationRepository implements IConversationRepository {
   constructor(
     @InjectRepository(Conversation)
     private readonly conversationRepository: Repository<Conversation>,
-  ) { }
+  ) {}
 
   async findAll(limit = 20, offset = 0): Promise<Conversation[]> {
     return this.conversationRepository.find({
@@ -107,9 +107,6 @@ export class ConversationRepository implements IConversationRepository {
       .execute();
   }
 
-  /**
-   * Find all conversations for a user
-   */
   async findByUserId(userId: number): Promise<Conversation[]> {
     try {
       const conversations = await this.conversationRepository.query(
@@ -125,7 +122,7 @@ export class ConversationRepository implements IConversationRepository {
         AND c.deleted_at IS NULL
         ORDER BY c.updated_at DESC
         `,
-        [userId]
+        [userId],
       );
 
       return conversations;
@@ -134,9 +131,21 @@ export class ConversationRepository implements IConversationRepository {
     }
   }
 
-  /**
-   * Soft delete conversation
-   */
+  async findConversationGroupMemberIds(
+    conversationId: number,
+  ): Promise<number[]> {
+    const conversation = await this.conversationRepository
+      .createQueryBuilder('conversation')
+      .innerJoin('conversation.group', 'group')
+      .innerJoin('group.members', 'member')
+      .select('member.user_id')
+      .where('conversation.id = :conversationId', { conversationId })
+      .andWhere('conversation.deleted_at IS NULL')
+      .getRawMany();
+
+    return conversation.map((row) => row.member_user_id);
+  }
+
   async softDelete(conversationId: number): Promise<boolean> {
     try {
       await this.conversationRepository.update(conversationId, {
@@ -148,9 +157,6 @@ export class ConversationRepository implements IConversationRepository {
     }
   }
 
-  /**
-   * Search conversations by name or last message
-   */
   async findConversation(
     school_id: number,
     sender_id: number,
@@ -163,11 +169,9 @@ export class ConversationRepository implements IConversationRepository {
       SELECT DISTINCT c.*
       FROM conversations c
 
-      -- group membership (for group chats)
       LEFT JOIN group_members gm 
         ON gm.group_id = c.group_id
 
-      -- other user (for 1-1 chats)
       LEFT JOIN users u 
         ON c.type = 'user'
         AND (
@@ -180,14 +184,12 @@ export class ConversationRepository implements IConversationRepository {
         AND c.type = $3
         AND c.deleted_at IS NULL
 
-        -- user participation
         AND (
           c.last_message_sender_id = $2
           OR c.last_message_receiver_id = $2
           OR gm.user_id = $2
         )
 
-        -- optional receiver filter (for 1–1 conversation lookup)
         AND (
           $4::int IS NULL
           OR c.last_message_sender_id = $4
@@ -197,10 +199,10 @@ export class ConversationRepository implements IConversationRepository {
       ORDER BY c.last_message_date DESC NULLS LAST
       `,
         [
-          school_id,   // $1
-          sender_id,   // $2 (current user)
-          type,        // $3
-          receiver_id, // $4 (nullable)
+          school_id, 
+          sender_id, 
+          type, 
+          receiver_id,
         ],
       );
 
@@ -210,8 +212,6 @@ export class ConversationRepository implements IConversationRepository {
       return [];
     }
   }
-
-
 
   async cleanupOldDeletedConversations(daysOld: number = 90): Promise<number> {
     try {

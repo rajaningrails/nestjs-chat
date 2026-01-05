@@ -23,8 +23,7 @@ export class MessageService {
     private readonly socketService: SocketService,
 
     @InjectQueue('messages') private messageQueue: Queue,
-  ) {
-  }
+  ) {}
 
   async createMessageConnection(dto: CreateMessageDto) {
     const queryRunner = this.dataSource.createQueryRunner();
@@ -133,7 +132,6 @@ export class MessageService {
     }
   }
 
-
   /**
    * Send message with proper error handling and optimistic updates
    */
@@ -142,7 +140,7 @@ export class MessageService {
     const createdAt = new Date();
 
     const conversation = await this.conversationRepository.findById(
-      dto.conversation_id
+      dto.conversation_id,
     );
 
     if (!conversation) {
@@ -175,7 +173,7 @@ export class MessageService {
     };
 
     try {
-      const job = await this.messageQueue.add('save-message', queueData, {
+      await this.messageQueue.add('save-message', queueData, {
         attempts: 3,
         backoff: {
           type: 'exponential',
@@ -190,37 +188,24 @@ export class MessageService {
       if (dto.receiver_id) {
         recipients.push(dto.receiver_id);
       } else if (dto.group_id) {
-        // const groupMembers = await this.conversationRepository
-        //   .getGroupMembers(dto.group_id);
-
-        // recipients.push(
-        //   ...groupMembers
-        //     .filter(memberId => memberId !== dto.sender_id)
-        // );
+        const groupMembers = await this.conversationRepository.findConversationGroupMemberIds(
+          dto.conversation_id,
+        );
+        recipients.push(
+          ...groupMembers.filter((memberId) => memberId !== dto.sender_id),
+        );
       }
 
-      const emitResults = await Promise.allSettled([
-        this.socketService.emitToUser(
-          dto.sender_id,
-          'message:sent',
-          {
+      await Promise.allSettled([
+        this.socketService.emitToUser(dto.sender_id, 'message', {
+          ...messageData,
+        }),
+        ...recipients.map((recipientId) =>
+          this.socketService.emitToUser(recipientId, 'message', {
             ...messageData,
-            status: 'pending',
-            jobId: job.id,
-          }
-        ),
-        ...recipients.map(recipientId =>
-          this.socketService.emitToUser(
-            recipientId,
-            'message:received',
-            {
-              ...messageData,
-              status: 'pending',
-            }
-          )
+          }),
         ),
       ]);
-
 
       return {
         id: Number(dto.conversation_id),
@@ -243,70 +228,11 @@ export class MessageService {
         group_image: '',
       };
     } catch (error) {
-
-      await this.socketService.emitToUser(
-        dto.sender_id,
-        'message:error',
-        {
-          tempId: messageId,
-          error: 'Failed to send message',
-        }
-      );
-
       throw error;
     }
   }
 
-
-  async onMessageSaved(messageId: string, success: boolean, error?: string) {
-    try {
-      const message = await this.messageRepository.findById(messageId);
-
-      if (!message) {
-        return;
-      }
-
-      const recipients: number[] = [message.sender_id];
-
-      if (message.receiver_id) {
-        recipients.push(message.receiver_id);
-      } else if (message.group_id) {
-        // const groupMembers = await this.conversationRepository
-        //   .getGroupMembers(message.group_id);
-        // recipients.push(...groupMembers);
-      }
-
-      if (success) {
-        await this.socketService.emitToUsers(
-          recipients,
-          'message:confirmed',
-          {
-            id: messageId,
-            conversation_id: message.conversation_id,
-            status: 'sent',
-            saved_at: new Date(),
-          }
-        );
-      } else {
-        await this.socketService.emitToUser(
-          message.sender_id,
-          'message:failed',
-          {
-            id: messageId,
-            conversation_id: message.conversation_id,
-            error: error || 'Failed to save message',
-          }
-        );
-      }
-    } catch (err) {
-    }
-  }
-
-
-  async markMessageAsSeen(
-    messageId: string,
-    userId: number
-  ): Promise<void> {
+  async markMessageAsSeen(messageId: string, userId: number): Promise<void> {
     try {
       const message = await this.messageRepository.findById(messageId);
 
@@ -320,16 +246,12 @@ export class MessageService {
 
       await this.messageRepository.markAsSeen(messageId);
 
-      await this.socketService.emitToUser(
-        message.sender_id,
-        'message:seen',
-        {
-          message_id: messageId,
-          conversation_id: message.conversation_id,
-          seen_by: userId,
-          seen_at: new Date(),
-        }
-      );
+      await this.socketService.emitToUser(message.sender_id, 'message:seen', {
+        message_id: messageId,
+        conversation_id: message.conversation_id,
+        seen_by: userId,
+        seen_at: new Date(),
+      });
     } catch (error) {
       throw error;
     }
@@ -338,30 +260,28 @@ export class MessageService {
   async emitTypingIndicator(
     conversationId: number,
     userId: number,
-    isTyping: boolean
+    isTyping: boolean,
   ): Promise<void> {
     try {
-      const conversation = await this.conversationRepository.findById(conversationId);
+      const conversation =
+        await this.conversationRepository.findById(conversationId);
 
       if (!conversation) {
         throw new Error('Conversation not found');
       }
 
       if (conversation.type === ConversationType.USER) {
-        const recipientId = conversation.school_id === userId
-          ? conversation.last_message_receiver_id
-          : conversation.last_message_sender_id;
+        const recipientId =
+          conversation.school_id === userId
+            ? conversation.last_message_receiver_id
+            : conversation.last_message_sender_id;
 
         if (recipientId) {
-          await this.socketService.emitToUser(
-            recipientId,
-            'typing',
-            {
-              conversation_id: conversationId,
-              user_id: userId,
-              is_typing: isTyping,
-            }
-          );
+          await this.socketService.emitToUser(recipientId, 'typing', {
+            conversation_id: conversationId,
+            user_id: userId,
+            is_typing: isTyping,
+          });
         }
       } else if (conversation.type === ConversationType.GROUP) {
         const roomId = `conversation:${conversationId}`;
@@ -373,13 +293,11 @@ export class MessageService {
             user_id: userId,
             is_typing: isTyping,
           },
-          userId
+          userId,
         );
       }
-    } catch (error) {
-    }
+    } catch (error) {}
   }
-
 
   async getUndeliveredMessages(userId: number): Promise<Message[]> {
     try {
@@ -388,7 +306,6 @@ export class MessageService {
       return [];
     }
   }
-
 
   //   async markMessageAsSeen(dto: MarkSeenDto) {
   //     const seenData = {

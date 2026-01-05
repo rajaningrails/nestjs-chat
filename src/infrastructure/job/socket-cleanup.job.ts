@@ -13,16 +13,16 @@ export class SocketCleanupJob {
     private readonly messageRepository: MessageRepository,
     private readonly conversationRepository: ConversationRepository
   ) { }
+  //uncomment on production
+  // @Cron(CronExpression.EVERY_10_MINUTES)
+  // async cleanupStaleConnections() {
+  //   await this.socketService.cleanupStaleConnections();
+  // }
 
-  @Cron(CronExpression.EVERY_10_MINUTES)
-  async cleanupStaleConnections() {
-    await this.socketService.cleanupStaleConnections();
-  }
-
-  @Cron(CronExpression.EVERY_HOUR)
-  async cleanupExpiredPresence() {
-    await this.presenceService.cleanupExpiredPresence();
-  }
+  // @Cron(CronExpression.EVERY_HOUR)
+  // async cleanupExpiredPresence() {
+  //   await this.presenceService.cleanupExpiredPresence();
+  // }
 
   // @Cron('0 3 * * *')
   // async cleanupOldMessages() {

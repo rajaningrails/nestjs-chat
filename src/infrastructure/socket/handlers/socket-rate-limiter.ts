@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { RedisService } from '../redis.service';
+import { RedisService } from '../../../common/services/redis.service';
 
 @Injectable()
 export class SocketRateLimiter {

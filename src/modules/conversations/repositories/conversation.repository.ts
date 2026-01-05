@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { IConversationRepository } from './conversation.repository.interface';
 import { Conversation } from '../entities/conversation.entity';
 import { toMySQLDate } from 'src/utils/helpers';
@@ -9,8 +9,9 @@ import { toMySQLDate } from 'src/utils/helpers';
 export class ConversationRepository implements IConversationRepository {
   constructor(
     @InjectRepository(Conversation)
+    private readonly dataSource: DataSource,
     private readonly conversationRepository: Repository<Conversation>,
-  ) {}
+  ) { }
 
   async findAll(limit = 20, offset = 0): Promise<Conversation[]> {
     return this.conversationRepository.find({
@@ -105,5 +106,130 @@ export class ConversationRepository implements IConversationRepository {
         createdAt,
       })
       .execute();
+  }
+
+  /**
+   * Find all conversations for a user
+   */
+  async findByUserId(userId: number): Promise<Conversation[]> {
+    try {
+      const conversations = await this.dataSource.query(
+        `
+        SELECT DISTINCT c.*
+        FROM conversations c
+        LEFT JOIN chat_group_members gm ON gm.group_id = c.group_id
+        WHERE ( 
+          c.last_message_sender_id = $1
+          OR c.last_message_receiver_id = $1 
+          OR gm.user_id = $1
+        )
+        AND c.deleted_at IS NULL
+        ORDER BY c.updated_at DESC
+        `,
+        [userId]
+      );
+
+      return conversations;
+    } catch (error) {
+      return [];
+    }
+  }
+
+  /**
+   * Soft delete conversation
+   */
+  async softDelete(conversationId: number): Promise<boolean> {
+    try {
+      await this.conversationRepository.update(conversationId, {
+        deleted_at: new Date(),
+      });
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Search conversations by name or last message
+   */
+  async findConversation(
+    school_id: number,
+    sender_id: number,
+    receiver_id: number | null,
+    type: 'group' | 'user',
+  ): Promise<Conversation[]> {
+    try {
+      const conversations = await this.dataSource.query(
+        `
+      SELECT DISTINCT c.*
+      FROM conversations c
+
+      -- group membership (for group chats)
+      LEFT JOIN group_members gm 
+        ON gm.group_id = c.group_id
+
+      -- other user (for 1-1 chats)
+      LEFT JOIN users u 
+        ON c.type = 'user'
+        AND (
+          (c.last_message_sender_id = u.id AND u.id != $2)
+          OR
+          (c.last_message_receiver_id = u.id AND u.id != $2)
+        )
+
+      WHERE c.school_id = $1
+        AND c.type = $3
+        AND c.deleted_at IS NULL
+
+        -- user participation
+        AND (
+          c.last_message_sender_id = $2
+          OR c.last_message_receiver_id = $2
+          OR gm.user_id = $2
+        )
+
+        -- optional receiver filter (for 1–1 conversation lookup)
+        AND (
+          $4::int IS NULL
+          OR c.last_message_sender_id = $4
+          OR c.last_message_receiver_id = $4
+        )
+
+      ORDER BY c.last_message_date DESC NULLS LAST
+      `,
+        [
+          school_id,   // $1
+          sender_id,   // $2 (current user)
+          type,        // $3
+          receiver_id, // $4 (nullable)
+        ],
+      );
+
+      return conversations;
+    } catch (error) {
+      console.error('findConversation error:', error);
+      return [];
+    }
+  }
+
+
+
+  async cleanupOldDeletedConversations(daysOld: number = 90): Promise<number> {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+
+      const result = await this.conversationRepository
+        .createQueryBuilder()
+        .delete()
+        .from(Conversation)
+        .where('deleted_at IS NOT NULL')
+        .andWhere('deleted_at < :cutoffDate', { cutoffDate })
+        .execute();
+
+      return result.affected || 0;
+    } catch (error) {
+      return 0;
+    }
   }
 }

@@ -1,78 +1,87 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Server, Socket } from 'socket.io';
+import { Server } from 'socket.io';
 import { RedisService } from '../redis.service';
+import Redis from 'ioredis';
+
+interface EmitOptions {
+  timeout?: number;
+  requireAck?: boolean;
+  retry?: number;
+}
 
 @Injectable()
 export class SocketService {
   private readonly logger = new Logger(SocketService.name);
   private server: Server | null = null;
 
-  // Redis key prefixes
   private readonly USER_SOCKET_PREFIX = 'socket:user:';
   private readonly SOCKET_USER_PREFIX = 'socket:id:';
   private readonly ROOM_MEMBERS_PREFIX = 'room:members:';
+  private readonly SOCKET_TTL = 86400; // 24 hours
 
-  constructor(private readonly redisService: RedisService) {}
-
-  // Set the Socket.IO server instance
+  constructor(private readonly redisService: RedisService) { }
   setServer(server: Server) {
     this.server = server;
   }
 
-  private get redis() {
+  private get redis(): Redis {
     return this.redisService.getClient();
   }
 
-  // ==================== USER-SOCKET MAPPING ====================
-
   /**
-   * Store user's socket ID in Redis
-   * Supports multiple devices (one user can have multiple sockets)
+   * Store user's socket with atomic operations and proper error handling
    */
-  async addUserSocket(userId: number, socketId: string): Promise<void> {
+  async addUserSocket(userId: number, socketId: string): Promise<boolean> {
+    const pipeline = this.redis.pipeline();
+
     try {
       const userKey = `${this.USER_SOCKET_PREFIX}${userId}`;
       const socketKey = `${this.SOCKET_USER_PREFIX}${socketId}`;
 
-      // Add socket to user's socket set (supports multiple devices)
-      await this.redis.sadd(userKey, socketId);
+      pipeline.sadd(userKey, socketId);
+      pipeline.expire(userKey, this.SOCKET_TTL);
+      pipeline.set(socketKey, userId.toString(), 'EX', this.SOCKET_TTL);
 
-      // Store reverse mapping (socket -> user)
-      await this.redis.set(socketKey, userId.toString(), 'EX', 86400); // 24h expiry
+      await pipeline.exec();
 
-      // Set expiry on user's socket set
-      await this.redis.expire(userKey, 86400); // 24 hours
-
-      this.logger.log(`✅ User ${userId} socket ${socketId} stored in Redis`);
+      return true;
     } catch (error) {
-      this.logger.error(`Failed to store socket for user ${userId}:`, error);
+      return false;
     }
   }
 
   /**
-   * Remove user's socket from Redis
+   * Remove socket with cleanup
    */
-  async removeUserSocket(userId: number, socketId: string): Promise<void> {
-    try {
+    async removeUserSocket(userId: number, socketId: string): Promise<void> {
+      const pipeline = this.redis.pipeline();
+
       const userKey = `${this.USER_SOCKET_PREFIX}${userId}`;
       const socketKey = `${this.SOCKET_USER_PREFIX}${socketId}`;
 
-      await this.redis.srem(userKey, socketId);
-      await this.redis.del(socketKey);
+      pipeline.srem(userKey, socketId);
+      pipeline.del(socketKey);
+      pipeline.scard(userKey);
 
-      this.logger.log(`🗑️ User ${userId} socket ${socketId} removed from Redis`);
-    } catch (error) {
-      this.logger.error(`Failed to remove socket for user ${userId}:`, error);
+      const results = await pipeline.exec();
+
+      const remainingSockets = results?.[2]?.[1] as number;
+      if (remainingSockets === 0) {
+        await this.redis.del(userKey);
+      }
     }
-  }
 
   /**
-   * Get all socket IDs for a user (supports multiple devices)
+   * Get all socket IDs for a user with caching
    */
   async getUserSockets(userId: number): Promise<string[]> {
     try {
       const userKey = `${this.USER_SOCKET_PREFIX}${userId}`;
-      return await this.redis.smembers(userKey);
+      const sockets = await this.redis.smembers(userKey);
+
+      return sockets.filter(socketId =>
+        this.server?.sockets.sockets.has(socketId)
+      );
     } catch (error) {
       this.logger.error(`Failed to get sockets for user ${userId}:`, error);
       return [];
@@ -80,72 +89,70 @@ export class SocketService {
   }
 
   /**
-   * Get user ID from socket ID
+   * Get user ID from socket with error handling
    */
   async getUserIdBySocket(socketId: string): Promise<number | null> {
     try {
       const socketKey = `${this.SOCKET_USER_PREFIX}${socketId}`;
       const userId = await this.redis.get(socketKey);
-      return userId ? parseInt(userId) : null;
+      return userId ? parseInt(userId, 10) : null;
     } catch (error) {
       this.logger.error(`Failed to get user for socket ${socketId}:`, error);
       return null;
     }
   }
 
-  // ==================== ROOM MANAGEMENT ====================
-
   /**
-   * Add user to a room (conversation, group, etc.)
+   * Join room with proper error handling
    */
-  async joinRoom(socketId: string, roomId: string, userId: number): Promise<void> {
+  async joinRoom(socketId: string, roomId: string, userId: number): Promise<boolean> {
     try {
-      // Add to Socket.IO room
       const socket = this.server?.sockets.sockets.get(socketId);
-      if (socket) {
-        socket.join(roomId);
+      if (!socket) {
+        this.logger.warn(`Socket ${socketId} not found when joining room ${roomId}`);
+        return false;
       }
 
-      // Track room members in Redis
-      const roomKey = `${this.ROOM_MEMBERS_PREFIX}${roomId}`;
-      await this.redis.sadd(roomKey, userId.toString());
-      await this.redis.expire(roomKey, 86400); // 24h expiry
+      await socket.join(roomId);
 
-      this.logger.log(`User ${userId} joined room ${roomId}`);
+      const roomKey = `${this.ROOM_MEMBERS_PREFIX}${roomId}`;
+      const pipeline = this.redis.pipeline();
+      pipeline.sadd(roomKey, userId.toString());
+      pipeline.expire(roomKey, this.SOCKET_TTL);
+      await pipeline.exec();
+
+      return true;
     } catch (error) {
       this.logger.error(`Failed to join room ${roomId}:`, error);
+      return false;
     }
   }
 
   /**
-   * Remove user from a room
+   * Leave room
    */
   async leaveRoom(socketId: string, roomId: string, userId: number): Promise<void> {
     try {
-      // Remove from Socket.IO room
       const socket = this.server?.sockets.sockets.get(socketId);
       if (socket) {
-        socket.leave(roomId);
+        await socket.leave(roomId);
       }
 
-      // Remove from Redis room members
       const roomKey = `${this.ROOM_MEMBERS_PREFIX}${roomId}`;
       await this.redis.srem(roomKey, userId.toString());
-
-      this.logger.log(`User ${userId} left room ${roomId}`);
     } catch (error) {
       this.logger.error(`Failed to leave room ${roomId}:`, error);
     }
   }
 
   /**
-   * Get all members in a room
+   * Get room members efficiently
    */
   async getRoomMembers(roomId: string): Promise<number[]> {
     try {
       const roomKey = `${this.ROOM_MEMBERS_PREFIX}${roomId}`;
       const members = await this.redis.smembers(roomKey);
-      return members.map((m) => parseInt(m));
+      return members.map(m => parseInt(m, 10));
     } catch (error) {
       this.logger.error(`Failed to get room members for ${roomId}:`, error);
       return [];
@@ -153,65 +160,114 @@ export class SocketService {
   }
 
   /**
-   * Remove all users from a room (when room is deleted)
+   * Clear room
    */
   async clearRoom(roomId: string): Promise<void> {
     try {
       const roomKey = `${this.ROOM_MEMBERS_PREFIX}${roomId}`;
       await this.redis.del(roomKey);
-      this.logger.log(`Room ${roomId} cleared`);
+
+      // Also remove all sockets from Socket.IO room
+      if (this.server) {
+        this.server.in(roomId).socketsLeave(roomId);
+      }
     } catch (error) {
       this.logger.error(`Failed to clear room ${roomId}:`, error);
     }
   }
 
-  // ==================== EMIT EVENTS ====================
-
   /**
-   * Emit to a specific user (all their devices)
+   * Emit to user with parallel execution and options
    */
-  async emitToUser(userId: number, event: string, data: any): Promise<void> {
+  async emitToUser(
+    userId: number,
+    event: string,
+    data: any,
+    options?: EmitOptions
+  ): Promise<boolean> {
     try {
       const sockets = await this.getUserSockets(userId);
-      
+
       if (sockets.length === 0) {
-        this.logger.warn(`No active sockets for user ${userId}`);
-        return;
+        this.logger.debug(`No active sockets for user ${userId}`);
+        return false;
       }
 
-      for (const socketId of sockets) {
-        this.server?.to(socketId).emit(event, data);
-      }
+      await Promise.all(
+        sockets.map(socketId => {
+          const socket = this.server?.sockets.sockets.get(socketId);
+          if (!socket) return Promise.resolve();
 
-      this.logger.log(`📤 Event "${event}" sent to user ${userId} (${sockets.length} devices)`);
+          return new Promise<void>((resolve, reject) => {
+            if (options?.requireAck) {
+              const timeout = setTimeout(() => {
+                reject(new Error('Acknowledgment timeout'));
+              }, options.timeout || 5000);
+
+              socket.emit(event, data, () => {
+                clearTimeout(timeout);
+                resolve();
+              });
+            } else {
+              socket.emit(event, data);
+              resolve();
+            }
+          });
+        })
+      );
+
+      return true;
     } catch (error) {
       this.logger.error(`Failed to emit to user ${userId}:`, error);
+      return false;
     }
   }
 
   /**
-   * Emit to a room (conversation, group)
+   * Emit to room efficiently
    */
-  async emitToRoom(roomId: string, event: string, data: any): Promise<void> {
+  async emitToRoom(
+    roomId: string,
+    event: string,
+    data: any,
+    excludeUserId?: number
+  ): Promise<boolean> {
     try {
-      if (!this.server) {
-        throw new Error('Socket.IO server not initialized');
+      if (!this.server) return false;
+
+      if (excludeUserId) {
+        const excludeSockets = await this.getUserSockets(excludeUserId);
+        if (excludeSockets.length > 0) {
+          this.server.to(roomId).except(excludeSockets).emit(event, data);
+        } else {
+          this.server.to(roomId).emit(event, data);
+        }
+      } else {
+        this.server.to(roomId).emit(event, data);
       }
 
-      this.server.to(roomId).emit(event, data);
-      this.logger.log(`📤 Event "${event}" sent to room ${roomId}`);
+      return true;
     } catch (error) {
       this.logger.error(`Failed to emit to room ${roomId}:`, error);
+      return false;
     }
   }
 
   /**
-   * Emit to multiple users
+   * Emit to multiple users in parallel with batching
    */
-  async emitToUsers(userIds: number[], event: string, data: any): Promise<void> {
+  async emitToUsers(
+    userIds: number[],
+    event: string,
+    data: any,
+    batchSize: number = 50
+  ): Promise<void> {
     try {
-      for (const userId of userIds) {
-        await this.emitToUser(userId, event, data);
+      for (let i = 0; i < userIds.length; i += batchSize) {
+        const batch = userIds.slice(i, i + batchSize);
+        await Promise.all(
+          batch.map(userId => this.emitToUser(userId, event, data))
+        );
       }
     } catch (error) {
       this.logger.error('Failed to emit to multiple users:', error);
@@ -228,33 +284,51 @@ export class SocketService {
       }
 
       this.server.emit(event, data);
-      this.logger.log(`📡 Event "${event}" broadcasted to all clients`);
     } catch (error) {
       this.logger.error('Failed to broadcast:', error);
     }
   }
 
-  // ==================== UTILITY ====================
-
-  /**
-   * Check if user is online (has active sockets)
-   */
   async isUserOnline(userId: number): Promise<boolean> {
-    const sockets = await this.getUserSockets(userId);
-    return sockets.length > 0;
+    try {
+      const userKey = `${this.USER_SOCKET_PREFIX}${userId}`;
+      const count = await this.redis.scard(userKey);
+      return count > 0;
+    } catch (error) {
+      this.logger.error(`Failed to check online status for user ${userId}:`, error);
+      return false;
+    }
   }
 
   /**
-   * Get all online users
+   * Get online users 
    */
   async getOnlineUsers(): Promise<number[]> {
     try {
+      const onlineUsers = new Set<number>();
       const pattern = `${this.USER_SOCKET_PREFIX}*`;
-      const keys = await this.redis.keys(pattern);
-      
-      return keys.map((key) => 
-        parseInt(key.replace(this.USER_SOCKET_PREFIX, ''))
-      );
+
+      let cursor = '0';
+      do {
+        const [newCursor, keys] = await this.redis.scan(
+          cursor,
+          'MATCH',
+          pattern,
+          'COUNT',
+          100
+        );
+
+        cursor = newCursor;
+
+        for (const key of keys) {
+          const userId = parseInt(key.replace(this.USER_SOCKET_PREFIX, ''), 10);
+          if (!isNaN(userId)) {
+            onlineUsers.add(userId);
+          }
+        }
+      } while (cursor !== '0');
+
+      return Array.from(onlineUsers);
     } catch (error) {
       this.logger.error('Failed to get online users:', error);
       return [];
@@ -269,23 +343,65 @@ export class SocketService {
   }
 
   /**
-   * Disconnect a user (kick from all devices)
+   * Disconnect user from all devices
    */
   async disconnectUser(userId: number, reason?: string): Promise<void> {
     try {
       const sockets = await this.getUserSockets(userId);
-      
-      for (const socketId of sockets) {
-        const socket = this.server?.sockets.sockets.get(socketId);
-        if (socket) {
-          socket.disconnect(true);
-        }
-        await this.removeUserSocket(userId, socketId);
-      }
+
+      await Promise.all(
+        sockets.map(async socketId => {
+          const socket = this.server?.sockets.sockets.get(socketId);
+          if (socket) {
+            socket.disconnect(true);
+          }
+          await this.removeUserSocket(userId, socketId);
+        })
+      );
 
       this.logger.log(`User ${userId} disconnected: ${reason || 'No reason'}`);
     } catch (error) {
       this.logger.error(`Failed to disconnect user ${userId}:`, error);
     }
+  }
+
+  /**
+   * Cleanup stale connections (run periodically via cron)
+   */
+  async cleanupStaleConnections(): Promise<number> {
+    let cleaned = 0;
+    try {
+      const pattern = `${this.SOCKET_USER_PREFIX}*`;
+      let cursor = '0';
+
+      do {
+        const [newCursor, keys] = await this.redis.scan(
+          cursor,
+          'MATCH',
+          pattern,
+          'COUNT',
+          100
+        );
+
+        cursor = newCursor;
+
+        for (const key of keys) {
+          const socketId = key.replace(this.SOCKET_USER_PREFIX, '');
+
+          if (!this.server?.sockets.sockets.has(socketId)) {
+            const userId = await this.getUserIdBySocket(socketId);
+            if (userId) {
+              await this.removeUserSocket(userId, socketId);
+              cleaned++;
+            }
+          }
+        }
+      } while (cursor !== '0');
+
+    } catch (error) {
+      this.logger.error('Failed to cleanup stale connections:', error);
+    }
+
+    return cleaned;
   }
 }

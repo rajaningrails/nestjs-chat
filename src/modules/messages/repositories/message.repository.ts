@@ -9,7 +9,7 @@ export class MessageRepository implements IMessageRepository {
   constructor(
     @InjectRepository(Message)
     private readonly messageRepository: Repository<Message>,
-  ) {}
+  ) { }
 
   async findByConversation(
     senderId: number,
@@ -37,7 +37,7 @@ export class MessageRepository implements IMessageRepository {
 
   async findById(id: any): Promise<Message | null> {
     return this.messageRepository.findOne({
-      where: { id},
+      where: { id },
     });
   }
 
@@ -75,6 +75,93 @@ export class MessageRepository implements IMessageRepository {
         .execute();
     } catch (error) {
       throw error;
+    }
+  }
+
+
+  async findUndeliveredForUser(userId: number): Promise<Message[]> {
+    try {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const messages = await this.messageRepository
+        .createQueryBuilder('message')
+        .where('message.receiver_id = :userId', { userId })
+        .andWhere('message.seen_at IS NULL')
+        .andWhere('message.delivered_at IS NULL')
+        .andWhere('message.created_at >= :sevenDaysAgo', { sevenDaysAgo })
+        .andWhere('message.deleted_at IS NULL')
+        .orderBy('message.created_at', 'ASC')
+        .limit(100)
+        .getMany();
+
+
+      if (messages.length > 0) {
+        const messageIds = messages.map(m => m.id);
+        await this.markAsDelivered(messageIds);
+      }
+
+      return messages;
+    } catch (error) {
+      return [];
+    }
+  }
+
+  async markAsDelivered(messageIds: string[]): Promise<void> {
+    try {
+      if (messageIds.length === 0) return;
+
+      await this.messageRepository
+        .createQueryBuilder()
+        .update(Message)
+        .set({ delivered_at: new Date() })
+        .where('id IN (:...messageIds)', { messageIds })
+        .execute();
+
+    } catch (error) {
+    }
+  }
+
+  async searchMessages(
+    userId: number,
+    query: string,
+    limit: number = 50
+  ): Promise<Message[]> {
+    try {
+      return await this.messageRepository
+        .createQueryBuilder('message')
+        .leftJoinAndSelect('message.conversation', 'conversation')
+        .where(
+          '(message.sender_id = :userId OR message.receiver_id = :userId)',
+          { userId }
+        )
+        .andWhere('message.message ILIKE :query', { query: `%${query}%` })
+        .andWhere('message.deleted_at IS NULL')
+        .orderBy('message.created_at', 'DESC')
+        .limit(limit)
+        .getMany();
+    } catch (error) {
+      return [];
+    }
+  }
+
+
+  async cleanupOldMessages(daysOld: number = 90): Promise<number> {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+
+      const result = await this.messageRepository
+        .createQueryBuilder()
+        .delete()
+        .from(Message)
+        .where('deleted_at IS NOT NULL')
+        .andWhere('deleted_at < :cutoffDate', { cutoffDate })
+        .execute();
+
+      return result.affected || 0;
+    } catch (error) {
+      return 0;
     }
   }
 }

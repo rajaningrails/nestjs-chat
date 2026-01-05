@@ -57,6 +57,9 @@ export class Conversation {
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
   updated_at: Date;
 
+  @UpdateDateColumn({ name: 'deleted_at', type: 'timestamp' })
+  deleted_at: Date;
+
   @ManyToOne(() => ChatGroup, (group) => group.conversations, { 
     nullable: true,
     onDelete: 'SET NULL'

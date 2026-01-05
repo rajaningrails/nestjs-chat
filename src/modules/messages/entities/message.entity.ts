@@ -61,6 +61,9 @@ export class Message {
   @Column({ name: 'removed_at', type: 'timestamp', nullable: true })
   removed_at: Date | null;
 
+  @Column({ name: 'delivered_at', type: 'timestamp', nullable: true })
+  delivered_at: Date | null;
+
   @CreateDateColumn({ type: 'timestamp' })
   created_at: Date;
 

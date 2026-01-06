@@ -22,7 +22,8 @@ interface AuthenticatedSocket extends Socket {
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL || '*',
+    // origin: process.env.ALLOWED_ORIGINS,
+    origin: '*',
     credentials: true,
   },
   transports: ['websocket', 'polling'],
@@ -82,15 +83,13 @@ export class MessageGateway
    */
   async handleConnection(client: AuthenticatedSocket) {
     try {
-      const userId = client.userId;
-
+      let userId: string|number = client.handshake.query?.sender_id as string;
       if (!userId) {
-        this.logger.warn(`Connection rejected: No user ID`);
+        this.logger.warn(`Connection rejected: No user ID`,client.handshake);
         client.disconnect();
         return;
       }
-
-      // Store socket mapping
+      userId = Number(userId);
       const success = await this.socketService.addUserSocket(userId, client.id);
 
       if (!success) {

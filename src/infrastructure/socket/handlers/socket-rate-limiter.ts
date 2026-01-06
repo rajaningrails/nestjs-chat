@@ -47,7 +47,6 @@ export class SocketRateLimiter {
       return { allowed, remaining };
     } catch (error) {
       this.logger.error('Rate limit check failed:', error);
-      // Fail open - allow the request if Redis is down
       return { allowed: true, remaining: limit };
     }
   }

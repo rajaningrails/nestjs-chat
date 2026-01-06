@@ -169,6 +169,8 @@ export class MessageService {
 
     try {
       await this.messageQueue.add('save-message', queueData, {
+        jobId: messageId,
+        priority: 1,
         attempts: 3,
         backoff: {
           type: 'exponential',

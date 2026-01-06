@@ -72,15 +72,13 @@ export class MessageService {
 
       const messageId = this.generateMessageId();
 
-      await manager.getRepository(Message).save({
+      await this.messageRepository.save({
         id: messageId,
         school_id: dto.school_id,
         sender_id: dto.sender_id,
         receiver_id: dto.receiver_id,
-        conversation_id: conversationId,
-        message: dto.message ?? null,
-        attachments: null,
-        createdAt: new Date(),
+        conversation_id: Number(conversationId),
+        message: dto.message,
       });
 
       await this.conversationRepository.updateLastMessage(
@@ -132,9 +130,6 @@ export class MessageService {
     }
   }
 
-  /**
-   * Send message with proper error handling and optimistic updates
-   */
   async sendMessage(dto: MessageDto) {
     const messageId = this.generateMessageId();
     const createdAt = new Date();

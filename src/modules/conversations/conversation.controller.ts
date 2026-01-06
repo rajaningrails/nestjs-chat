@@ -17,7 +17,7 @@ export class ConversationController {
   ) {}
 
   @Post()
-  async create(@Body() conversation: any) {
+  async create(@Body() conversation) {
     return this.conversationRepository.save(conversation);
   }
 

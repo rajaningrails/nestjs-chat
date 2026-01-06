@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { IUserRepository } from './user.repository.interface';
 import { User } from '../entities/user.entity';
+import { CreateUserDto } from '../dto/create-user.dto';
 
 @Injectable()
 export class UserRepository implements IUserRepository {
@@ -19,7 +20,7 @@ export class UserRepository implements IUserRepository {
     return this.userRepository.findOne({ where: { user_id } });
   }
 
-  async create(userData: Partial<User>): Promise<User> {
+  async create(userData: CreateUserDto): Promise<User> {
     const user = this.userRepository.create(userData);
     return this.userRepository.save(user);
   }
@@ -43,5 +44,18 @@ export class UserRepository implements IUserRepository {
       return;
     }
     await repo.upsert(userData, ['user_id', 'school_id']);
+  }
+
+  async findByUserIds(userIds: number[]): Promise<User[]> {
+    return this.userRepository.find({
+      where:{
+        user_id: In(userIds)
+      }
+    });
+  }
+
+  async bulkCreate(users: CreateUserDto[]):Promise<void> {
+    const entities = this.userRepository.create(users);
+    await this.userRepository.save(entities);
   }
 }

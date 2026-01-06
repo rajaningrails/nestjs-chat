@@ -24,11 +24,11 @@ export class User {
   @Column({ type: 'int' })
   user_id: number;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text' })
   name?: string;
 
   @Column({ type: 'text', nullable: true })
-  image?: string;
+  image?: string | null;
 
   @Column({
     type: 'enum',

@@ -25,7 +25,7 @@ export class MessageController {
   ) {}
 
   @SkipThrottle()
-  @Post('send')
+  @Post('send-message')
   async sendMessage(@Body() dto: MessageDto) {
     return this.messageService.sendMessage(dto);
   }

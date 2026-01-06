@@ -18,6 +18,7 @@ import { ThrottleModule } from './common/throttler/throttler.module';
 import { APP_GUARD } from '@nestjs/core';
 import { HmacAuthGuard } from './common/guard/hmac-auth.guard';
 import { TasksModule } from './infrastructure/job/task.module';
+import { GroupModule } from './modules/group/group.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { TasksModule } from './infrastructure/job/task.module';
     UsersModule,
     ConversationsModule,
     MessageModule,
+    GroupModule,
   ],
   controllers: [AppController],
   providers: [

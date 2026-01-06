@@ -15,6 +15,7 @@ import { User } from 'src/modules/users/entities/user.entity';
 import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
 
 @Entity('chat_groups')
+@Index(['group_name'], { unique: true })
 @Index('idx_school_id', ['school_id'])
 @Index('idx_created_by', ['created_by'])
 export class ChatGroup {
@@ -38,7 +39,6 @@ export class ChatGroup {
 
   @UpdateDateColumn({ name: 'updated_at', type: 'datetime' })
   updated_at: Date;
-
 
   @ManyToOne(() => User, (user) => user.createdGroups, { nullable: false })
   @JoinColumn({ name: 'created_by', referencedColumnName: 'user_id' })

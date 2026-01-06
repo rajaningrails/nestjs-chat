@@ -26,8 +26,8 @@ export class Message {
   @PrimaryColumn('varchar', { length: 36 })
   id: string;
 
-  @Column({ type: 'bigint', nullable: false })
-  conversation_id: bigint;
+  @Column({ type: 'int', nullable: false })
+  conversation_id: number;
 
   @Column({ type: 'int' })
   school_id: number;
@@ -36,10 +36,10 @@ export class Message {
   sender_id: number;
 
   @Column({ type: 'int', nullable: true })
-  receiver_id: number | null;
+  receiver_id: number;
 
   @Column({ type: 'int', nullable: true })
-  group_id: number | null;
+  group_id: number;
 
   @Column({
     type: 'text',
@@ -47,22 +47,22 @@ export class Message {
     collation: 'utf8mb4_unicode_ci',
     nullable: true,
   })
-  message: string | null;
+  message: string;
 
-  @Column({ type: 'text', nullable: true })
-  attachments: string | null;
+  @Column({ type: 'json', nullable: true })
+  attachments: string[];
 
   @Column({ type: 'timestamp', nullable: true })
-  seen_at: Date | null;
+  seen_at: Date;
 
   @DeleteDateColumn({ name: 'deleted_at', type: 'timestamp', nullable: true })
-  deleted_at: Date | null;
+  deleted_at: Date;
 
   @Column({ name: 'removed_at', type: 'timestamp', nullable: true })
-  removed_at: Date | null;
+  removed_at: Date;
 
   @Column({ name: 'delivered_at', type: 'timestamp', nullable: true })
-  delivered_at: Date | null;
+  delivered_at: Date;
 
   @CreateDateColumn({ type: 'timestamp' })
   created_at: Date;
@@ -84,9 +84,9 @@ export class Message {
 
   @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'receiver_id', referencedColumnName: 'user_id' })
-  receiver?: User | null;
+  receiver?: User;
 
   @ManyToOne(() => ChatGroup, { nullable: true })
   @JoinColumn({ name: 'group_id', referencedColumnName: 'id' })
-  group?: ChatGroup | null;
+  group?: ChatGroup;
 }

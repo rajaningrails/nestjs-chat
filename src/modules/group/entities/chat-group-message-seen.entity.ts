@@ -26,6 +26,9 @@ export class GroupMessageSeen {
   message_id: number;
 
   @Column({ type: 'int' })
+  group_id: number;
+
+  @Column({ type: 'int' })
   user_id: number;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamp' })

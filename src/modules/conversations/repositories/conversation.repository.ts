@@ -4,6 +4,7 @@ import { EntityManager, Repository } from 'typeorm';
 import { IConversationRepository } from './conversation.repository.interface';
 import { Conversation } from '../entities/conversation.entity';
 import { toMySQLDate } from 'src/utils/helpers';
+import { CreateConversationDto } from '../dto/create-conversation.dto';
 
 @Injectable()
 export class ConversationRepository implements IConversationRepository {
@@ -26,7 +27,7 @@ export class ConversationRepository implements IConversationRepository {
     return this.conversationRepository.findOne({ where: { id } });
   }
 
-  async save(conversationData: Partial<Conversation>): Promise<Conversation> {
+  async save(conversationData: CreateConversationDto): Promise<Conversation> {
     const conversation = this.conversationRepository.create(conversationData);
     return this.conversationRepository.save(conversation);
   }

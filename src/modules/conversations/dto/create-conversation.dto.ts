@@ -15,7 +15,7 @@ export class CreateConversationDto {
 
   @IsOptional()
   @IsInt()
-  group_id?: number;
+  group_id?: number | null;
 
   @IsEnum(ConversationType)
   @IsNotEmpty()
@@ -27,11 +27,11 @@ export class CreateConversationDto {
 
   @IsOptional()
   @IsInt()
-  last_message_id?: number;
+  last_message_id?: string;
 
   @IsOptional()
   @IsString()
-  last_message?: string;
+  last_message?: string | null;
 
   @IsOptional()
   @IsInt()
@@ -39,7 +39,7 @@ export class CreateConversationDto {
 
   @IsOptional()
   @IsInt()
-  last_message_receiver_id?: number;
+  last_message_receiver_id?: number | null;
 
   @IsOptional()
   @IsDateString()

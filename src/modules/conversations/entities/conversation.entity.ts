@@ -36,8 +36,8 @@ export class Conversation {
   @Column({ type: 'enum', enum: GroupType, nullable: true })
   group_type: GroupType | null;
 
-  @Column({ type: 'bigint', nullable: true })
-  last_message_id: bigint | null;
+  @Column({ type: 'varchar', nullable: true })
+  last_message_id: string | null;
 
   @Column({ type: 'text', nullable: true })
   last_message: string | null;
@@ -57,8 +57,8 @@ export class Conversation {
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
   updated_at: Date;
 
-  @UpdateDateColumn({ name: 'deleted_at', type: 'timestamp' })
-  deleted_at: Date;
+  @UpdateDateColumn({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  deleted_at: Date | null;
 
   @ManyToOne(() => ChatGroup, (group) => group.conversations, { 
     nullable: true,

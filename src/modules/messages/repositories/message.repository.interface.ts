@@ -1,3 +1,4 @@
+import { CreateMessageDto } from '../dto/create-message.dto';
 import { Message } from '../entities/message.entity';
 
 export const IMessageRepositoryToken = Symbol('IMessageRepository');
@@ -13,7 +14,7 @@ export interface IMessageRepository {
 
   findById(id: number): Promise<Message | null>;
 
-  save(messageData: Partial<Message>): Promise<Message>;
+  save(messageData: Partial<CreateMessageDto>): Promise<Message>;
 
   update(
     id: string,

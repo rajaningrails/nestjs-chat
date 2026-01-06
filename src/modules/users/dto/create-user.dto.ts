@@ -16,13 +16,14 @@ export class CreateUserDto {
   @IsNotEmpty()
   user_id: number;
 
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
-  name?: string;
+  name: string;
+  
 
   @IsOptional()
   @IsString()
-  image?: string;
+  image: string | null;
 
   @IsEnum(UserType)
   @IsNotEmpty()

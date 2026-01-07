@@ -1,3 +1,4 @@
+import { CreateChatGroupDto, UpdateGroupDto } from '../dto/chat-group.dto';
 import { ChatGroup } from '../entities/chat-group.entity';
 
 export const IGroupRepositoryToken = Symbol('IGroupRepository');
@@ -26,36 +27,36 @@ export interface ICreateGroup {
   sender_section: string;
 }
 
-export interface IGroupResponse {
-  conversation_id: number;
+export interface IRepositoryGroupResponse {
+  group_id: number;
 }
 export interface IGroupRepository {
   //   findGroup(conversationId: number): Promise<ChatGroup>;
 
-  //   update({
-  //     created_by,
-  //     group_id,
-  //     group_name,
-  //     image,
-  //     school_id,
-  //     staffDetails,
-  //     studentDetails,
-  //   }: IUpdateGroup): Promise<IGroupResponse>;
+  update({
+    created_by,
+    group_id,
+    group_name,
+    group_image,
+    school_id,
+    staffDetails,
+    studentDetails,
+  }: UpdateGroupDto): Promise<IRepositoryGroupResponse>;
 
   create({
     created_by,
     group_name,
-    image,
+    group_image,
     school_id,
     staffDetails,
     studentDetails,
-  }: ICreateGroup): Promise<{
-    group_id: number;
-  }>;
+  }: CreateChatGroupDto): Promise<IRepositoryGroupResponse>;
 
   //   findGroupById(groupId: number): Promise<ChatGroup | null>;
 
-  //   getGroupNames(school_id: number, user_id: number): Promise<Array<string>>;
+    getGroupNamesByUserId(school_id: number, user_id: number): Promise<ChatGroup[] | null>;
+
+    findByIdWithGroupMembers(id: number): Promise<ChatGroup | null>;
 
   //   getGroupMembers(groupId: number): Promise<Array<any>>;
 

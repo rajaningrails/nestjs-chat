@@ -8,6 +8,7 @@ import {
   ManyToOne,
   JoinColumn,
   Index,
+  DeleteDateColumn,
 } from 'typeorm';
 import { ChatGroupMember } from './chat-group-member.entity';
 import { GroupMessageSeen } from './chat-group-message-seen.entity';
@@ -39,6 +40,9 @@ export class ChatGroup {
 
   @UpdateDateColumn({ name: 'updated_at', type: 'datetime' })
   updated_at: Date;
+
+  @DeleteDateColumn({ name: 'deleted_at', type: 'datetime', nullable: true })
+  deleted_at: Date;
 
   @ManyToOne(() => User, (user) => user.createdGroups, { nullable: false })
   @JoinColumn({ name: 'created_by', referencedColumnName: 'user_id' })

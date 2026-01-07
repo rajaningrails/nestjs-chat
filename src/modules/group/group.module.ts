@@ -9,6 +9,7 @@ import { ConversationsModule } from '../conversations/conversation.module';
 import { MessageModule } from '../messages/message.module';
 import { UsersModule } from '../users/users.module';
 import { IGroupRepositoryToken } from './repositories/group.repository.interface';
+import { UpdateGroupUseCase } from './use-cases/update-group.use-case';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { IGroupRepositoryToken } from './repositories/group.repository.interface
   controllers: [GroupController],
   providers: [
     CreateGroupUseCase,
+    UpdateGroupUseCase,
     {
       provide: IGroupRepositoryToken,
       useClass: GroupRepository,

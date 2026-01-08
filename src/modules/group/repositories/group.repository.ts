@@ -27,7 +27,7 @@ export class GroupRepository implements IGroupRepository {
       where: {
         group_name: group_name?.trim()?.toLowerCase(),
         deleted_at: IsNull(),
-        ...(group_id && { id: Not(group_id) }),
+        ...(group_id && { id: Not(group_id) }) as any,
       },
     });
 
@@ -146,11 +146,11 @@ export class GroupRepository implements IGroupRepository {
     };
   }
 
-  async findById(id: number): Promise<ChatGroup | null> {
+  async findById(id: string): Promise<ChatGroup | null> {
     return this.groupRepo.findOne({ where: { id, deleted_at: IsNull() } });
   }
 
-  async findByIdWithGroupMembers(id: number): Promise<ChatGroup | null> {
+  async findByIdWithGroupMembers(id: string): Promise<ChatGroup | null> {
     const group = await this.groupRepo.findOne({
       where: { id },
       withDeleted: false,

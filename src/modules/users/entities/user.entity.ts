@@ -10,13 +10,15 @@ import {
 } from 'typeorm';
 import { UserType } from '../dto/user-type.enum';
 import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
+import { IsUUID } from 'class-validator';
 
 @Entity('users')
 @Unique('unique_user', ['school_id', 'user_id'])
 @Index('idx_user_id', ['user_id'])
 export class User {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  @IsUUID()
+  id: string;
 
   @Column({ type: 'int' })
   school_id: number;

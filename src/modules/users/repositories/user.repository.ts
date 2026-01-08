@@ -4,6 +4,7 @@ import { EntityManager, In, Repository } from 'typeorm';
 import { IUserRepository } from './user.repository.interface';
 import { User } from '../entities/user.entity';
 import { CreateUserDto } from '../dto/create-user.dto';
+import { UpdateUserDto } from '../dto/update-user.dto';
 
 @Injectable()
 export class UserRepository implements IUserRepository {
@@ -25,13 +26,13 @@ export class UserRepository implements IUserRepository {
     return this.userRepository.save(user);
   }
 
-  async update(user_id: number, userData: Partial<User>): Promise<User | null> {
+  async update(user_id: number, userData: UpdateUserDto): Promise<User | null> {
     await this.userRepository.update(user_id, userData);
     return this.findByUserId(user_id);
   }
 
   async upsertUser(
-    userData: Partial<User>,
+    userData: CreateUserDto,
     manager?: EntityManager,
   ): Promise<void> {
     const repo = manager ? manager.getRepository(User) : this.userRepository;

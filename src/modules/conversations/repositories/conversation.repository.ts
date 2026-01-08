@@ -5,6 +5,7 @@ import { IConversationRepository } from './conversation.repository.interface';
 import { Conversation } from '../entities/conversation.entity';
 import { toMySQLDate } from 'src/utils/helpers';
 import { CreateConversationDto } from '../dto/create-conversation.dto';
+import { UpdateConversationDto } from '../dto/update-conversation.dto';
 
 @Injectable()
 export class ConversationRepository implements IConversationRepository {
@@ -23,7 +24,7 @@ export class ConversationRepository implements IConversationRepository {
     });
   }
 
-  async findById(id: any): Promise<Conversation | null> {
+  async findById(id: string): Promise<Conversation | null> {
     return this.conversationRepository.findOne({ where: { id } });
   }
 
@@ -33,17 +34,17 @@ export class ConversationRepository implements IConversationRepository {
   }
 
   async update(
-    id: number,
-    conversationData: Partial<Conversation>,
+    id: string,
+    conversationData: Partial<UpdateConversationDto>,
   ): Promise<Conversation | null> {
     await this.conversationRepository.update(id, conversationData);
     return this.findById(id);
   }
 
   async upsert(
-    convData: Partial<Conversation>,
+    convData: Partial<CreateConversationDto>,
     manager?: EntityManager,
-  ): Promise<bigint> {
+  ): Promise<string> {
     const repo = manager
       ? manager.getRepository(Conversation)
       : this.conversationRepository;
@@ -71,7 +72,7 @@ export class ConversationRepository implements IConversationRepository {
   }
 
   async updateLastMessage(
-    conversationId: number,
+    conversationId: string,
     data: Partial<Conversation>,
     manager?: EntityManager,
   ) {
@@ -83,7 +84,7 @@ export class ConversationRepository implements IConversationRepository {
   }
 
   async updateLastMessageSafe(data: {
-    conversationId: number;
+    conversationId: string;
     messageId: string;
     message: string | null;
     sender_id: number;
@@ -133,7 +134,7 @@ export class ConversationRepository implements IConversationRepository {
   }
 
   async findConversationGroupMemberIds(
-    conversationId: number,
+    conversationId: string,
   ): Promise<number[]> {
     const conversation = await this.conversationRepository
       .createQueryBuilder('conversation')
@@ -147,7 +148,7 @@ export class ConversationRepository implements IConversationRepository {
     return conversation.map((row) => row.member_user_id);
   }
 
-  async softDelete(conversationId: number): Promise<boolean> {
+  async softDelete(conversationId: string): Promise<boolean> {
     try {
       await this.conversationRepository.update(conversationId, {
         deleted_at: new Date(),

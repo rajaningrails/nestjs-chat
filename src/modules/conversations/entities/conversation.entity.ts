@@ -12,6 +12,7 @@ import {
 import { ConversationType, GroupType } from '../dto/conversations.enum';
 import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
 import { Message } from 'src/modules/messages/entities/message.entity';
+import { IsUUID } from 'class-validator';
 
 @Entity('conversations')
 @Index('idx_school_id', ['school_id'])
@@ -21,32 +22,33 @@ import { Message } from 'src/modules/messages/entities/message.entity';
 @Index('idx_participants', ['school_id', 'type'])
 @Index('idx_updated_at', ['updated_at'])
 export class Conversation {
-  @PrimaryGeneratedColumn({ type: 'bigint' })
-  id: bigint;
+  @PrimaryGeneratedColumn('uuid')
+  @IsUUID()
+  id: string;
 
   @Column({ type: 'int' })
   school_id: number;
 
-  @Column({ type: 'int', nullable: true })
-  group_id: number | null;
+  @Column({ type: 'string', nullable: true })
+  group_id: string;
 
   @Column({ type: 'enum', enum: ConversationType })
   type: ConversationType;
 
   @Column({ type: 'enum', enum: GroupType, nullable: true })
-  group_type: GroupType | null;
+  group_type: GroupType;
 
   @Column({ type: 'varchar', nullable: true })
-  last_message_id: string | null;
+  last_message_id: string;
 
   @Column({ type: 'text', nullable: true })
-  last_message: string | null;
+  last_message: string;
 
   @Column({ type: 'int', nullable: true })
-  last_message_sender_id: number | null;
+  last_message_sender_id: number;
 
   @Column({ type: 'int', nullable: true })
-  last_message_receiver_id: number | null;
+  last_message_receiver_id: number;
 
   @Column({ type: 'timestamp', nullable: true })
   last_message_seen_at: Date | null;
@@ -58,14 +60,14 @@ export class Conversation {
   updated_at: Date;
 
   @UpdateDateColumn({ name: 'deleted_at', type: 'timestamp', nullable: true })
-  deleted_at: Date | null;
+  deleted_at: Date;
 
   @ManyToOne(() => ChatGroup, (group) => group.conversations, { 
     nullable: true,
     onDelete: 'SET NULL'
   })
   @JoinColumn({ name: 'group_id', referencedColumnName: 'id' })
-  group: ChatGroup | null;
+  group: ChatGroup;
 
   @OneToMany(() => Message, (message) => message.conversation)
   messages: Message[];
@@ -75,5 +77,5 @@ export class Conversation {
     onDelete: 'SET NULL'
   })
   @JoinColumn({ name: 'last_message_id', referencedColumnName: 'id' })
-  lastMessage?: Message | null;
+  lastMessage?: Message;
 }

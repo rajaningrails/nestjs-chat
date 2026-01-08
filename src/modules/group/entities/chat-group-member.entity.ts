@@ -1,26 +1,28 @@
 import {
   Entity,
-  PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
   Index,
+  PrimaryColumn,
 } from 'typeorm';
 import { ChatGroup } from './chat-group.entity';
 import { User } from 'src/modules/users/entities/user.entity';
+import { IsUUID } from 'class-validator';
 
 @Entity('chat_group_members')
 @Index(['group_id', 'user_id'], { unique: true })
 @Index('idx_group_id', ['group_id'])
 @Index('idx_user_id', ['user_id'])
 export class ChatGroupMember {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryColumn('uuid')
+  @IsUUID()
+  id: string;
 
-  @Column({ type: 'int' })
-  group_id: number;
+  @Column({ type: 'string' })
+  group_id: string;
 
   @Column({ type: 'int' })
   user_id: number;

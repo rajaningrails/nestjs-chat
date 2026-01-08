@@ -15,64 +15,55 @@ async function bootstrap() {
       trustProxy: true,
     }),
   );
+
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 3000);
 
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
 
-  // Global pipes
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
-      // forbidNonWhitelisted: true,
       transform: true,
     }),
   );
 
-  // Global filters
   app.useGlobalFilters(new HttpExceptionFilter());
-  
-  // Global interceptors
-  app.useGlobalInterceptors(
-    // new LoggingInterceptor(),
-    new TransformInterceptor(),
-  );
 
-    // CORS configuration - Fastify syntax
+  app.useGlobalInterceptors(new TransformInterceptor());
+
   await app.register(require('@fastify/cors'), {
     origin: true,
     credentials: true,
   });
-  
+
   await app.register(require('@fastify/multipart'));
 
   // Global prefix
   app.setGlobalPrefix('api');
-  
-  // Listen on all interfaces (0.0.0.0) for Docker/cloud deployments
+
+  app.enableShutdownHooks();
+
   await app.listen(port, '0.0.0.0');
+
+  const gracefulShutdown = async (signal: string) => {
+    
+    try {
+      await app.close();
+      process.exit(0);
+    } catch (error) {
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   
-
-  // pm2 graceful shutdown
-  process.on('SIGINT', async () => {
-    console.log('🛑 Received SIGINT, shutting down gracefully...');
-    await app.close();
-    process.exit(0);
-  });
-
-  process.on('SIGTERM', async () => {
-    console.log('🛑 Received SIGTERM, shutting down gracefully...');
-    await app.close();
-    process.exit(0);
-  });
-
   process.on('message', (msg) => {
     if (msg === 'shutdown') {
-      console.log('🛑 Received shutdown message from PM2...');
-      app.close().then(() => {
-        process.exit(0);
-      });
+      gracefulShutdown('PM2 shutdown message');
     }
   });
 }
+
 bootstrap();

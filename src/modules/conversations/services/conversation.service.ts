@@ -18,33 +18,23 @@ export class ConversationService {
         private readonly dataSource: DataSource,
     ) { }
 
-    /**
-     * Get all conversations for a user
-     */
     async getUserConversations(userId: number) {
         try {
             return await this.conversationRepository.findByUserId(userId);
         } catch (error) {
-            this.logger.error(`Failed to get conversations for user ${userId}:`, error);
             throw error;
         }
     }
 
-    /**
-     * Get all contacts for a user (people they've had conversations with)
-     */
     async getUserContacts(userId: number): Promise<UserContact[]> {
         try {
-            // Get all conversations where user is a participant
             const conversations = await this.conversationRepository
                 .findByUserId(userId);
 
             const contactIds = new Set<number>();
 
-            // Extract unique contact IDs from conversations
             for (const conversation of conversations) {
                 if (conversation.type === 'user') {
-                    // Direct message - add the other user
                     if (conversation.last_message_sender_id !== userId) {
                         contactIds.add(conversation.last_message_sender_id!);
                     }
@@ -61,7 +51,6 @@ export class ConversationService {
                 }
             }
 
-            // Fetch user details for all contacts
             if (contactIds.size === 0) {
                 return [];
             }
@@ -86,12 +75,8 @@ export class ConversationService {
         }
     }
 
-    /**
-     * Get all members of a group
-     */
     async getGroupMembers(groupId: number): Promise<number[]> {
         try {
-            // Assuming you have a group_members or similar table
             const members = await this.dataSource.query(
                 `
         SELECT user_id 
@@ -108,10 +93,7 @@ export class ConversationService {
         }
     }
 
-    /**
-     * Delete conversation (soft delete)
-     */
-    async deleteConversation(conversationId: number, userId: number) {
+    async deleteConversation(conversationId: string) {
         try {
 
             await this.dataSource.query(

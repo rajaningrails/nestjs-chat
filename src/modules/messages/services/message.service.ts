@@ -1,14 +1,13 @@
+import { v4 as uuidv4 } from 'uuid';
 import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { MessageRepository } from '../repositories/message.repository';
 import { MessageDto } from '../dto/message.dto';
-import { MessageGateway } from '../gateway/message.gateway';
 import { CreateMessageDto } from '../dto/create-message.dto';
 import { UserRepository } from 'src/modules/users/repositories/user.repository';
 import { ConversationRepository } from 'src/modules/conversations/repositories/conversation.repository';
 import { ConversationType } from 'src/modules/conversations/dto/conversations.enum';
-import { v4 as uuidv4 } from 'uuid';
 import { Message } from '../entities/message.entity';
 import { DataSource } from 'typeorm';
 import { SocketService } from 'src/common/services/socket/socket.service';

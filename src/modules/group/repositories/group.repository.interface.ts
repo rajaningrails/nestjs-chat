@@ -28,11 +28,9 @@ export interface ICreateGroup {
 }
 
 export interface IRepositoryGroupResponse {
-  group_id: number;
+  group_id: string;
 }
 export interface IGroupRepository {
-  //   findGroup(conversationId: number): Promise<ChatGroup>;
-
   update({
     created_by,
     group_id,
@@ -52,21 +50,10 @@ export interface IGroupRepository {
     studentDetails,
   }: CreateChatGroupDto): Promise<IRepositoryGroupResponse>;
 
-  //   findGroupById(groupId: number): Promise<ChatGroup | null>;
+  getGroupNamesByUserId(
+    school_id: number,
+    user_id: number,
+  ): Promise<ChatGroup[] | null>;
 
-    getGroupNamesByUserId(school_id: number, user_id: number): Promise<ChatGroup[] | null>;
-
-    findByIdWithGroupMembers(id: number): Promise<ChatGroup | null>;
-
-  //   getGroupMembers(groupId: number): Promise<Array<any>>;
-
-  //   getGroupList({
-  //     school_id,
-  //     level,
-  //     user_id,
-  //   }: {
-  //     school_id: number;
-  //     level: string;
-  //     user_id: number;
-  //   }): Promise<Array<any>>;
+  findByIdWithGroupMembers(id: string): Promise<ChatGroup | null>;
 }

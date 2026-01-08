@@ -9,19 +9,22 @@ import {
   JoinColumn,
   Index,
   DeleteDateColumn,
+  PrimaryColumn,
 } from 'typeorm';
 import { ChatGroupMember } from './chat-group-member.entity';
 import { GroupMessageSeen } from './chat-group-message-seen.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
+import { IsUUID } from 'class-validator';
 
 @Entity('chat_groups')
 @Index(['group_name'], { unique: true })
 @Index('idx_school_id', ['school_id'])
 @Index('idx_created_by', ['created_by'])
 export class ChatGroup {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryColumn('uuid')
+  @IsUUID()
+  id: string;
 
   @Column({ type: 'int', nullable: true })
   school_id?: number;

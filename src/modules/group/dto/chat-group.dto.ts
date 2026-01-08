@@ -1,79 +1,9 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { Type } from 'class-transformer';
-import { IsArray, IsEmail, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsEmail, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
 
-export class CreateChatGroupDto {
-  @IsInt()
-  @IsNotEmpty({ message: 'group_id is required' })
-  group_id: number;
-
-  @IsInt()
-  @IsNotEmpty({ message: 'school_id is required' })
-  school_id: number;
-
-  @IsString()
-  @IsNotEmpty({ message: 'group_name is required' })
-  group_name: string;
-
-  @IsString()
-  @IsOptional()
-  group_image: string;
-
-  @IsNumber()
-  @IsNotEmpty({ message: 'created by is required' })
-  created_by: number;
-
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ChatGroupMemberDto)
-  @IsOptional()
-  studentDetails?: ChatGroupMemberDto[];
-
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ChatGroupMemberDto)
-  @IsOptional()
-  staffDetails?: ChatGroupMemberDto[];
-}
-
-
-export class UpdateGroupDto {
-  @IsInt()
-  @IsNotEmpty({ message: 'group_id is required' })
-  group_id: number;
-
-  @IsInt()
-  @IsNotEmpty({ message: 'school_id is required' })
-  school_id: number;
-
-  @IsString()
-  @IsNotEmpty({ message: 'group_name is required' })
-  group_name: string;
-
-  @IsNumber()
-  @IsNotEmpty({ message: 'created by is required' })
-  created_by: number;
-
-  @IsString()
-  @IsOptional()
-  group_image: string;
-
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ChatGroupMemberDto)
-  @IsOptional()
-  studentDetails?: ChatGroupMemberDto[];
-
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ChatGroupMemberDto)
-  @IsOptional()
-  staffDetails?: ChatGroupMemberDto[];
-}
-
-
-
-export class ChatGroupMemberDto{
+export class PartialCreateUserDto{
   @IsInt()
   @IsNotEmpty({ message: 'users id is required' })
   id: number;
@@ -93,4 +23,73 @@ export class ChatGroupMemberDto{
   @IsString()
   @IsOptional()
   type: UserType;
+}
+
+export class CreateChatGroupDto {
+  @IsUUID()
+  @IsNotEmpty({ message: 'id is required' })
+  id: string;
+
+  @IsInt()
+  @IsNotEmpty({ message: 'school_id is required' })
+  school_id: number;
+
+  @IsString()
+  @IsNotEmpty({ message: 'group_name is required' })
+  group_name: string;
+
+  @IsString()
+  @IsOptional()
+  group_image: string;
+
+  @IsNumber()
+  @IsNotEmpty({ message: 'created by is required' })
+  created_by: number;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PartialCreateUserDto)
+  @IsOptional()
+  studentDetails?: PartialCreateUserDto[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PartialCreateUserDto)
+  @IsOptional()
+  staffDetails?: PartialCreateUserDto[];
+}
+
+
+export class UpdateGroupDto {
+  @IsInt()
+  @IsNotEmpty({ message: 'group_id is required' })
+  group_id: string;
+
+  @IsInt()
+  @IsNotEmpty({ message: 'school_id is required' })
+  school_id: number;
+
+  @IsString()
+  @IsNotEmpty({ message: 'group_name is required' })
+  group_name: string;
+
+  @IsNumber()
+  @IsNotEmpty({ message: 'created by is required' })
+  created_by: number;
+
+  @IsString()
+  @IsOptional()
+  group_image: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PartialCreateUserDto)
+  @IsOptional()
+  studentDetails?: PartialCreateUserDto[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PartialCreateUserDto)
+  @IsOptional()
+  staffDetails?: PartialCreateUserDto[];
 }

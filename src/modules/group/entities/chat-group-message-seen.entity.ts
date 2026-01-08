@@ -7,26 +7,29 @@ import {
   ManyToOne,
   JoinColumn,
   Index,
+  PrimaryColumn,
 } from 'typeorm';
 import { ChatGroup } from './chat-group.entity';
 import { User } from 'src/modules/users/entities/user.entity';
+import { IsUUID } from 'class-validator';
 
 @Entity('group_message_seen')
 @Index(['conversation_id', 'message_id', 'user_id'], { unique: true })
 @Index('idx_conversation_message', ['conversation_id', 'message_id'])
 @Index('idx_user_seen', ['user_id', 'conversation_id'])
 export class GroupMessageSeen {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryColumn('uuid')
+  @IsUUID()
+  id: string;
 
-  @Column({ type: 'int' })
-  conversation_id: number;
+  @Column({ type: 'string' })
+  conversation_id: string;
 
-  @Column({ type: 'int' })
-  message_id: number;
+  @Column({ type: 'string' })
+  message_id: string;
 
-  @Column({ type: 'int' })
-  group_id: number;
+  @Column({ type: 'string' })
+  group_id: string;
 
   @Column({ type: 'int' })
   user_id: number;

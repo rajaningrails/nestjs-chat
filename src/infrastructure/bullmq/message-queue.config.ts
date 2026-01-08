@@ -1,20 +1,19 @@
 import { BullModule } from "@nestjs/bullmq";
+import { MessageProcessorConfig } from "./size-queue.config";
 
 export const messageQueueConfig = BullModule.registerQueue({
-  name: 'messages',
+  name: MessageProcessorConfig.queue_name,
   defaultJobOptions: {
-    attempts: 3,
+    attempts: 5,
     backoff: {
       type: 'exponential',
       delay: 1000,
     },
     removeOnComplete: {
-      count: 100, // Keep last 100 completed jobs
-      age: 3600, // 1 hour
+      count: 500, 
+      age: 3600, 
     },
-    removeOnFail: {
-      count: 1000, // Keep last 1000 failed jobs
-      age: 86400, // 24 hours
-    },
+    priority: MessageProcessorConfig.priority,
+    removeOnFail: false
   },
 });

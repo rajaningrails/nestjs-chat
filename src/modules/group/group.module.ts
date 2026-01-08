@@ -10,13 +10,15 @@ import { MessageModule } from '../messages/message.module';
 import { UsersModule } from '../users/users.module';
 import { IGroupRepositoryToken } from './repositories/group.repository.interface';
 import { UpdateGroupUseCase } from './use-cases/update-group.use-case';
+import { groupQueueConfig } from 'src/infrastructure/bullmq';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ChatGroup, ChatGroupMember]),
     ConversationsModule, 
     MessageModule,
-    UsersModule      
+    UsersModule,
+    groupQueueConfig      
   ],
   controllers: [GroupController],
   providers: [

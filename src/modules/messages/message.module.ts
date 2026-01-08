@@ -7,19 +7,18 @@ import { IMessageRepositoryToken } from './repositories/message.repository.inter
 import { MessageService } from './services/message.service';
 import { MessageProcessor } from './processor/message.processor';
 import { MessageGateway } from './gateway/message.gateway';
-import { BullModule } from '@nestjs/bullmq';
 import { User } from '../users/entities/user.entity';
 import { Conversation } from '../conversations/entities/conversation.entity';
 import { UserRepository } from '../users/repositories/user.repository';
 import { ConversationRepository } from '../conversations/repositories/conversation.repository';
 import { ConversationService } from '../conversations/services/conversation.service';
+import { conversationQueueConfig, messageQueueConfig } from 'src/infrastructure/bullmq';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Message,User,Conversation]),
-    BullModule.registerQueue({
-      name: 'messages',
-    }),
+    messageQueueConfig,
+    conversationQueueConfig
   ],
   controllers: [MessageController],
   providers: [

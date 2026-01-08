@@ -7,9 +7,10 @@ import { CreateUserUseCase } from './use-cases/create-user.use-case';
 import { GetUserUseCase } from './use-cases/get-user.use-case';
 import { UserRepository } from './repositories/user.repository';
 import { UpdateUserUseCase } from './use-cases/update-user.use-case';
+import { userQueueConfig } from 'src/infrastructure/bullmq';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User])],
+  imports: [TypeOrmModule.forFeature([User]),userQueueConfig],
   controllers: [UserController],
   providers: [
     {

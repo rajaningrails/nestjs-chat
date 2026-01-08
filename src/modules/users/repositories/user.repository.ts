@@ -5,9 +5,12 @@ import { IUserRepository } from './user.repository.interface';
 import { User } from '../entities/user.entity';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
+import { escapeValue } from 'src/utils/helpers';
 
 @Injectable()
 export class UserRepository implements IUserRepository {
+  private readonly CHUNK_SIZE = 100;
+
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -49,14 +52,56 @@ export class UserRepository implements IUserRepository {
 
   async findByUserIds(userIds: number[]): Promise<User[]> {
     return this.userRepository.find({
-      where:{
-        user_id: In(userIds)
-      }
+      where: {
+        user_id: In(userIds),
+      },
     });
   }
 
-  async bulkCreate(users: CreateUserDto[]):Promise<void> {
+  async bulkCreate(users: CreateUserDto[]): Promise<void> {
     const entities = this.userRepository.create(users);
     await this.userRepository.save(entities);
+  }
+
+  async createBatch(users: CreateUserDto[]): Promise<void> {
+    for (let i = 0; i < users.length; i += this.CHUNK_SIZE) {
+      const chunk = users.slice(i, i + this.CHUNK_SIZE);
+      await this.userRepository
+        .createQueryBuilder()
+        .insert()
+        .into(User)
+        .values(chunk)
+        .orIgnore()
+        .execute();
+    }
+  }
+
+  async updateBatch(users: Partial<User>[]): Promise<void> {
+    if (!users.length) return;
+
+    const fields = ['name', 'email', 'image', 'type'];
+
+    const setObject: any = {};
+
+    for (const field of fields) {
+      const cases = users
+        .filter(u => u[field] !== undefined)
+        .map(u => `WHEN ${u.user_id} THEN ${escapeValue(u[field])}`)
+        .join(' ');
+
+      if (cases.length) {
+        setObject[field] = () =>
+          `CASE user_id ${cases} ELSE ${field} END`;
+      }
+    }
+
+    const ids = users.map(u => u.user_id);
+
+    await this.userRepository
+      .createQueryBuilder()
+      .update(User)
+      .set(setObject)
+      .where('user_id IN (:...ids)', { ids })
+      .execute();
   }
 }

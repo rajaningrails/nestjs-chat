@@ -6,40 +6,38 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { Job, Queue } from 'bullmq';
-import { GroupMemberProcessorConfig } from 'src/infrastructure/bullmq/size-queue.config';
+import { GroupMemberMessageSeenProcessorConfig } from 'src/infrastructure/bullmq/size-queue.config';
 import { Redis } from 'ioredis';
 import { GroupRepository } from '../repositories/group.repository';
 import { CreateChatGroupMemberDto } from '../dto/chat-group-member.dto';
 
-@Processor(GroupMemberProcessorConfig.queue_name, {
-  concurrency: GroupMemberProcessorConfig.no_of_jobs,
+@Processor(GroupMemberMessageSeenProcessorConfig.queue_name, {
+  concurrency: GroupMemberMessageSeenProcessorConfig.no_of_jobs,
   limiter: {
-    max: GroupMemberProcessorConfig.max_no_of_job_per_second,
+    max: GroupMemberMessageSeenProcessorConfig.max_no_of_job_per_second,
     duration: 1000,
   },
 })
 @Injectable()
-export class GroupMemberProcessor
+export class GroupMessageSeenProcessor
   extends WorkerHost
   implements OnModuleInit, OnModuleDestroy
 {
-  private readonly logger = new Logger(GroupMemberProcessor.name);
+  private readonly logger = new Logger(GroupMessageSeenProcessor.name);
 
-  private readonly CREATE_BUFFER_KEY = 'buffer:member:create';
-  private readonly UPDATE_BUFFER_KEY = 'buffer:member:update';
-  private readonly CREATE_LOCK_KEY = 'lock:member:create:flush';
-  private readonly UPDATE_LOCK_KEY = 'lock:member:update:flush';
+  private readonly CREATE_BUFFER_KEY = 'buffer:group-message-seen:create';
+  private readonly CREATE_LOCK_KEY = 'lock:member:group-message-seen:flush';
 
-  private readonly BATCH_SIZE = GroupMemberProcessorConfig.batch_size || 100;
+  private readonly BATCH_SIZE = GroupMemberMessageSeenProcessorConfig.batch_size || 100;
   private readonly FLUSH_INTERVAL =
-    GroupMemberProcessorConfig.batch_timeout || 5000;
+    GroupMemberMessageSeenProcessorConfig.batch_timeout || 5000;
   private readonly LOCK_TTL = 30000; // 30 seconds
 
   private flushInterval: NodeJS.Timeout | null = null;
   private redis: Redis;
 
   constructor(
-    @InjectQueue(GroupMemberProcessorConfig.queue_name)
+    @InjectQueue(GroupMemberMessageSeenProcessorConfig.queue_name)
     private userQueue: Queue,
     private readonly groupRepository: GroupRepository,
   ) {
@@ -51,7 +49,7 @@ export class GroupMemberProcessor
 
     this.flushInterval = setInterval(async () => {
       try {
-        await Promise.all([this.flushCreateBuffer(), this.flushUpdateBuffer()]);
+        await Promise.all([this.flushCreateBuffer()]);
       } catch (error) {
         this.logger.error('Periodic flush failed', error);
       }
@@ -65,10 +63,8 @@ export class GroupMemberProcessor
 
     try {
       switch (name) {
-        case 'save-member':
+        case 'group-member-seen':
           return await this.bufferCreate(data);
-        case 'update-member':
-          return await this.bufferUpdate(data);
         default:
           throw new Error(`Unknown job type: ${name}`);
       }
@@ -90,28 +86,6 @@ export class GroupMemberProcessor
     }
 
     return { success: true, buffered: true, operation: 'create' };
-  }
-
-  private async bufferUpdate(data: CreateChatGroupMemberDto) {
-    if (!data.id) {
-      throw new Error('id is required for updates');
-    }
-
-    await this.redis.hset(
-      this.UPDATE_BUFFER_KEY,
-      data.user_id.toString(),
-      JSON.stringify(data),
-    );
-
-    const count = await this.redis.hlen(this.UPDATE_BUFFER_KEY);
-
-    if (count >= this.BATCH_SIZE) {
-      this.flushUpdateBuffer().catch((err) =>
-        this.logger.error('Async update flush failed', err),
-      );
-    }
-
-    return { success: true, buffered: true, operation: 'update' };
   }
 
   private async flushCreateBuffer() {
@@ -142,8 +116,7 @@ export class GroupMemberProcessor
 
       const batch = rawData.map((item) => JSON.parse(item));
       try {
-        await this. groupRepository.removeMembers(batch[0].group_id, batch.map((m) => m.user_id));
-        await this.groupRepository.upsertMemberBatch(batch);
+        await this.groupRepository.groupMessageSeenBatch(batch);
       } catch (error) {
         await this.moveToDLQ('create', batch, error);
       }
@@ -152,51 +125,12 @@ export class GroupMemberProcessor
     }
   }
 
-  private async flushUpdateBuffer() {
-    const lockAcquired = await this.redis.set(
-      this.UPDATE_LOCK_KEY,
-      Date.now().toString(),
-      'PX',
-      this.LOCK_TTL,
-      'NX',
-    );
-
-    if (!lockAcquired) {
-      return;
-    }
-
-    try {
-      const result = await this.redis
-        .multi()
-        .hgetall(this.UPDATE_BUFFER_KEY)
-        .del(this.UPDATE_BUFFER_KEY)
-        .exec();
-
-      const hashData = result?.[0]?.[1] as Record<string, string>;
-
-      if (!hashData || Object.keys(hashData).length === 0) {
-        return;
-      }
-
-      const batch = Object.values(hashData).map((item) => JSON.parse(item));
-
-      try {
-        await this. groupRepository.removeMembers(batch[0].group_id, batch.map((m) => m.user_id));
-        await this.groupRepository.upsertMemberBatch(batch);
-      } catch (error) {
-        await this.moveToDLQ('update', batch, error);
-      }
-    } finally {
-      await this.redis.del(this.UPDATE_LOCK_KEY);
-    }
-  }
-
   private async moveToDLQ(
-    operation: 'create' | 'update',
+    operation: 'create',
     data: any[],
     error: any,
   ) {
-    const dlqKey = `dlq:user:${operation}`;
+    const dlqKey = `dlq:group-message-seen:${operation}`;
 
     const entry = {
       operation,
@@ -215,6 +149,6 @@ export class GroupMemberProcessor
       clearInterval(this.flushInterval);
     }
 
-    await Promise.all([this.flushCreateBuffer(), this.flushUpdateBuffer()]);
+    await Promise.all([this.flushCreateBuffer()]);
   }
 }

@@ -8,11 +8,13 @@ import {
   ManyToOne,
   JoinColumn,
   PrimaryColumn,
+  OneToMany,
 } from 'typeorm';
 import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
 import { IsUUID } from 'class-validator';
+import { GroupMessageSeen } from 'src/modules/group/entities/chat-group-message-seen.entity';
 
 @Entity('messages')
 @Index('idx_conversation_id', ['conversation_id'])
@@ -66,9 +68,9 @@ export class Message {
   updated_at: Date;
 
   // Relations
-  @ManyToOne(() => Conversation, (conversation) => conversation.messages, { 
+  @ManyToOne(() => Conversation, (conversation) => conversation.messages, {
     nullable: false,
-    onDelete: 'CASCADE'
+    onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'conversation_id', referencedColumnName: 'id' })
   conversation: Conversation;
@@ -84,4 +86,7 @@ export class Message {
   @ManyToOne(() => ChatGroup, { nullable: true })
   @JoinColumn({ name: 'group_id', referencedColumnName: 'id' })
   group?: ChatGroup;
+
+  @OneToMany(() => GroupMessageSeen, (seen) => seen.message)
+  seen_messages: GroupMessageSeen[];
 }

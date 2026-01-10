@@ -13,6 +13,7 @@ import { ChatGroup } from './chat-group.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import { IsUUID } from 'class-validator';
 import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
+import { Message } from 'src/modules/messages/entities/message.entity';
 
 @Entity('group_message_seen')
 @Index(['conversation_id', 'message_id', 'user_id'], { unique: true })
@@ -41,7 +42,9 @@ export class GroupMessageSeen {
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
   updated_at: Date;
 
-  @ManyToOne(() => ChatGroup, (group) => group.seen_messages, { onDelete: 'CASCADE' })
+  @ManyToOne(() => ChatGroup, (group) => group.seen_messages, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'conversation_id', referencedColumnName: 'id' })
   group: ChatGroup;
 
@@ -49,7 +52,15 @@ export class GroupMessageSeen {
   @JoinColumn({ name: 'user_id', referencedColumnName: 'user_id' })
   user: User;
 
-  @ManyToOne(() => Conversation, (conversation) => conversation.seen_messages, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Conversation, (conversation) => conversation.seen_messages, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'conversation_id', referencedColumnName: 'id' })
   conversation: Conversation;
+
+  @ManyToOne(() => Message, (message) => message.seen_messages, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'message_id', referencedColumnName: 'id' })
+  message: Message;
 }

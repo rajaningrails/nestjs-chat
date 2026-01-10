@@ -10,20 +10,25 @@ import {
 import { CreateChatGroupDto, UpdateGroupDto } from '../dto/chat-group.dto';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
 import { CreateChatGroupMemberDto } from '../dto/chat-group-member.dto';
+import { GroupMessageSeen } from '../entities/chat-group-message-seen.entity';
 
 @Injectable()
 export class GroupRepository implements IGroupRepository {
   constructor(
     @InjectRepository(ChatGroup)
     private readonly groupRepo: Repository<ChatGroup>,
+
     @InjectRepository(ChatGroupMember)
     private readonly groupMemberRepo: Repository<ChatGroupMember>,
+
+    @InjectRepository(GroupMessageSeen)
+    private readonly groupMessageSeenRepo: Repository<GroupMessageSeen>,
   ) {}
-  async upsertBatch(groups: any[]): Promise<void> {
+  async upsertBatch(groups: Partial<ChatGroup>[]): Promise<void> {
     if (!groups.length) return;
 
     const values = groups.map((g) => ({
-      id: g.id || g.group_id,
+      id: g.id,
       school_id: g.school_id,
       group_name: g.group_name?.trim(),
       group_image: g.group_image,
@@ -126,6 +131,18 @@ export class GroupRepository implements IGroupRepository {
     return { group_id: groupId };
   }
 
+  async groupMessageSeenBatch(payload: {
+    group_id: string;
+    user_id: number;
+    message_id: string;
+    conversation_id: string;
+  }[]) {
+    try {
+      await this.groupMessageSeenRepo.save(payload);
+    } catch (err) {
+      throw err;
+    }
+  }
   async update(data: UpdateGroupDto): Promise<IRepositoryGroupResponse> {
     const {
       group_id,

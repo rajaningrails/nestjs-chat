@@ -28,9 +28,11 @@ export class MessageProcessor
   private readonly CREATE_BUFFER_KEY = 'buffer:message:create';
   private readonly DELETE_BUFFER_KEY = 'buffer:message:create';
   private readonly UPDATE_BUFFER_KEY = 'buffer:message:update';
+  private readonly USER_SEEN_BUFFER_KEY = 'buffer:message:user-seen';
   private readonly CREATE_LOCK_KEY = 'lock:message:create:flush';
   private readonly UPDATE_LOCK_KEY = 'lock:message:update:flush';
   private readonly DELETE_LOCK_KEY = 'lock:message:delete:flush';
+  private readonly USER_SEEN_LOCK_KEY = 'lock:message:user-seen:flush';
 
   private readonly BATCH_SIZE = MessageProcessorConfig.batch_size || 100;
   private readonly FLUSH_INTERVAL =
@@ -52,7 +54,12 @@ export class MessageProcessor
 
     this.flushInterval = setInterval(async () => {
       try {
-        await Promise.all([this.flushCreateBuffer(), this.flushUpdateBuffer()]);
+        await Promise.all([
+          this.flushCreateBuffer(),
+          this.flushUpdateBuffer(),
+          this.flushDeleteBuffer(),
+          this.flushUserMessageSeen(),
+        ]);
       } catch (error) {
         this.logger.error('Periodic flush failed', error);
       }
@@ -72,6 +79,8 @@ export class MessageProcessor
           return await this.bufferUpdate(data);
         case 'delete-message':
           return await this.bufferDelete(data);
+        case 'one-to-one-seen':
+          return await this.bufferOneToOneSeen(data);
         default:
           throw new Error(`Unknown job type: ${name}`);
       }
@@ -246,8 +255,67 @@ export class MessageProcessor
     }
   }
 
+  private async bufferOneToOneSeen(data: { id: number | string }) {
+    if (!data.id) {
+      throw new Error('message id is required for seen');
+    }
+
+    await this.redis.sadd(this.USER_SEEN_BUFFER_KEY, data.id.toString());
+
+    const count = await this.redis.scard(this.USER_SEEN_BUFFER_KEY);
+
+    if (count >= this.BATCH_SIZE) {
+      this.flushUserMessageSeen().catch((err) =>
+        this.logger.error('Async seen flush failed', err),
+      );
+    }
+
+    return { success: true, buffered: true, operation: 'one-to-one-seen' };
+  }
+
+  private async flushUserMessageSeen() {
+    const lockAcquired = await this.redis.set(
+      this.USER_SEEN_LOCK_KEY,
+      Date.now().toString(),
+      'PX',
+      this.LOCK_TTL,
+      'NX',
+    );
+
+    if (!lockAcquired) {
+      return;
+    }
+
+    try {
+      const result = await this.redis
+        .multi()
+        .smembers(this.USER_SEEN_BUFFER_KEY)
+        .del(this.USER_SEEN_BUFFER_KEY)
+        .exec();
+
+      const ids = result?.[0]?.[1] as string[];
+
+      if (!ids || ids.length === 0) {
+        return;
+      }
+
+      try {
+        await this.messageRepository.oneToOneChatMessageSeenBatch(ids);
+      } catch (error) {
+        await this.moveToDLQ('one-to-one-seen', ids, error);
+      }
+    } finally {
+      await this.redis.del(this.USER_SEEN_LOCK_KEY);
+    }
+  }
+
   private async moveToDLQ(
-    operation: 'create' | 'update' | 'delete',
+    operation:
+      | 'create'
+      | 'update'
+      | 'delete'
+      | 'one-to-one-seen'
+      | 'group-seen',
     data: any[],
     error: any,
   ) {
@@ -270,6 +338,11 @@ export class MessageProcessor
       clearInterval(this.flushInterval);
     }
 
-    await Promise.all([this.flushCreateBuffer(), this.flushUpdateBuffer()]);
+    await Promise.all([
+      this.flushCreateBuffer(),
+      this.flushUpdateBuffer(),
+      this.flushDeleteBuffer(),
+      this.flushUserMessageSeen(),
+    ]);
   }
 }

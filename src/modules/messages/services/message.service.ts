@@ -25,7 +25,7 @@ export class MessageService {
       ...create,
       created_at: new Date(),
       updated_at: new Date(),
-    }))
+    }));
     const jobs = payloads.map((data) => ({
       name: 'save-message',
       data,
@@ -50,7 +50,9 @@ export class MessageService {
     await this.messageQueue.add('delete-message', messageId);
   }
 
-  async updateMessages(updates: Array<Partial<MessageDto>>): Promise<Partial<Message>[]> {
+  async updateMessages(
+    updates: Array<Partial<MessageDto>>,
+  ): Promise<Partial<Message>[]> {
     const payloads = updates?.map((update) => ({
       ...update,
       updated_at: new Date(),
@@ -64,5 +66,17 @@ export class MessageService {
     await this.messageQueue.addBulk(jobs);
 
     return payloads;
+  }
+  async oneToOneChatMessageSeen(messageId: string) {
+    await this.messageQueue.add('one-to-one-seen', messageId, {
+      jobId: `one-to-one-message-seen-${messageId}`,
+      priority: 3,
+    });
+  }
+  async groupChatMessageSeen(messageId: string) {
+    await this.messageQueue.add('group-seen', messageId, {
+      jobId: `group-message-seen-${messageId}`,
+      priority: 3,
+    });
   }
 }

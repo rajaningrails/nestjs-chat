@@ -15,8 +15,6 @@ import { SocketModule } from './infrastructure/socket/socket.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ThrottleModule } from './common/throttler/throttler.module';
-import { APP_GUARD } from '@nestjs/core';
-import { HmacAuthGuard } from './common/guard/hmac-auth.guard';
 import { TasksModule } from './infrastructure/job/task.module';
 import { GroupModule } from './modules/group/group.module';
 import { DLQModule } from './modules/dlq/dlq.module';

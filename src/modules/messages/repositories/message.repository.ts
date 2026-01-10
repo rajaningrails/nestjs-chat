@@ -10,6 +10,7 @@ export class MessageRepository implements IMessageRepository {
   constructor(
     @InjectRepository(Message)
     private readonly messageRepository: Repository<Message>,
+    private readonly
   ) {}
 
   async findByConversation(
@@ -70,6 +71,7 @@ export class MessageRepository implements IMessageRepository {
       .skip(offset)
       .getMany();
   }
+
   async upsertBatch(messages: Message[]): Promise<void> {
     if (!messages.length) return;
     try {
@@ -79,6 +81,19 @@ export class MessageRepository implements IMessageRepository {
         .into(Message)
         .values(messages)
         .orUpdate(['seen_at', 'deleted_at'], ['id'])
+        .execute();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async oneToOneChatMessageSeenBatch(ids: string[]): Promise<void> {
+    try {
+      await this.messageRepository
+        .createQueryBuilder()
+        .update(Message)
+        .set({ seen_at: new Date() })
+        .where('id IN (:...ids)', { ids })
         .execute();
     } catch (error) {
       throw error;

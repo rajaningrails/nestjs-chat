@@ -1,53 +1,32 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Injectable, ConflictException, Inject } from '@nestjs/common';
-import {
-  IGroupRepositoryToken,
-} from '../repositories/group.repository.interface';
-import { ConversationRepository } from 'src/modules/conversations/repositories/conversation.repository';
-import { MessageRepository } from 'src/modules/messages/repositories/message.repository';
+import { IGroupRepositoryToken } from '../repositories/group.repository.interface';
 import {
   ConversationType,
   GroupType,
 } from 'src/modules/conversations/dto/conversations.enum';
-import { UserRepository } from 'src/modules/users/repositories/user.repository';
 import { GroupRepository } from '../repositories/group.repository';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
-import { CreateChatGroupDto, ChatGroupMemberDto } from '../dto/chat-group.dto';
-import { CreateUserDto } from 'src/modules/users/dto/create-user.dto';
+import { CreateChatGroupDto } from '../dto/chat-group.dto';
+import { UserService } from 'src/modules/users/services/user.service';
+import { GroupService } from '../service/group.service';
+import { ConversationService } from 'src/modules/conversations/services/conversation.service';
+import { MessageService } from 'src/modules/messages/services/message.service';
 
 @Injectable()
 export class CreateGroupUseCase {
   constructor(
     @Inject(IGroupRepositoryToken)
     private readonly groupRepository: GroupRepository,
-    private readonly conversationRepository: ConversationRepository,
-    private readonly messageRepository: MessageRepository,
-    private readonly userRepository: UserRepository,
+    private readonly userService: UserService,
+    private readonly conversationService: ConversationService,
+    private readonly groupService: GroupService,
+    private readonly messageService: MessageService,
   ) {}
-
-  private async ensureUsersExist(members: ChatGroupMemberDto[], school_id: number) {
-    if (members.length === 0) return;
-    const existingUsers = await this.userRepository.findByUserIds(
-      members.map((m) => m.id),
-    );
-    const existingIds = new Set(existingUsers.map((u) => u.user_id));
-    const missingUsers = members.filter((m) => !existingIds.has(m.id));
-
-    if (missingUsers.length > 0) {
-      const usersToCreate:CreateUserDto[] = missingUsers.map((m) => ({
-        user_id: m.id,
-        name: m.name,
-        image: m.image || null,
-        school_id: school_id,
-        type: m.type,
-      }));
-      await this.userRepository.bulkCreate(usersToCreate);
-    }
-  }
 
   async execute(
     request: CreateChatGroupDto,
-  ): Promise<{ conversation_id: number; group_id: number }> {
+  ): Promise<{ conversation_id: string; group_id: string }> {
     const exists = await this.groupRepository.findGroupByName(
       request.group_name,
     );
@@ -67,7 +46,16 @@ export class CreateGroupUseCase {
       ...(request.staffDetails || []),
     ];
 
-    await this.ensureUsersExist(allMembers, request.school_id);
+    await this.userService.createUsers(
+      allMembers?.map((p) => ({
+        user_id: p.id,
+        name: p.name,
+        image: p.image || null,
+        school_id: request.school_id,
+        type: p.type,
+        id: uuidv4(),
+      })),
+    );
 
     let group_type: GroupType = GroupType.STUDENTS_GROUP;
     if (
@@ -83,40 +71,32 @@ export class CreateGroupUseCase {
     ) {
       group_type = GroupType.TEACHERS_GROUP;
     }
+    const conversation_id = uuidv4();
+    const message_id = uuidv4();
+    const group_id = uuidv4();
+    request.id = group_id;
 
-    const { group_id } = await this.groupRepository.create(request);
-
-    const savedConversation = await this.conversationRepository.save({
+    await this.groupService.createGroup(request);
+    await this.conversationService.createConversation({
+      id: conversation_id,
       school_id: request.school_id,
       type: ConversationType.GROUP,
-      group_id,
+      group_id: request.id,
       group_type,
-      last_message: 'New group has been created',
       last_message_sender_id: request.created_by,
-      last_message_receiver_id: null,
-      last_message_seen_at: null,
+      last_message_id: message_id,
     });
-
-    const conversationId = Number(savedConversation.id);
-
-    const savedMessage = await this.messageRepository.save({
-      id: uuidv4(),
-      conversation_id: Number(conversationId),
+    await this.messageService.createMessage({
+      conversation_id,
+      id: message_id,
       school_id: request.school_id,
       sender_id: request.created_by,
-      group_id,
+      group_id: group_id,
       message: 'New group has been created',
-      delivered_at: new Date(),
     });
-
-    await this.conversationRepository.update(conversationId, {
-      last_message_id: savedMessage.id,
-      updated_at: new Date(),
-    });
-
     return {
-      conversation_id: conversationId,
-      group_id,
+      conversation_id,
+      group_id: request.id,
     };
   }
 }

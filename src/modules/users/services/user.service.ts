@@ -3,16 +3,17 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { User } from '../entities/user.entity';
-import { v4 as uuidv4 } from 'uuid';
 import { UpdateUserDto } from '../dto/update-user.dto';
+import { UserProcessorConfig } from 'src/infrastructure/bullmq/size-queue.config';
 @Injectable()
 export class UserService {
-  constructor(@InjectQueue('users') private userQueue: Queue) {}
+  constructor(
+    @InjectQueue(UserProcessorConfig.queue_name) private userQueue: Queue,
+  ) {}
 
   async createUser(payload: CreateUserDto): Promise<User> {
-    const userID = this.generateUserId();
     const data: Partial<User> = {
-      id: userID,
+      id: payload.id,
       name: payload.name,
       type: payload.type,
       image: payload.image,
@@ -20,7 +21,7 @@ export class UserService {
       school_id: payload.school_id,
     };
     await this.userQueue.add('save-user', data);
-    return { ...data, id: userID } as User;
+    return { ...data } as User;
   }
 
   async createUsers(payload: CreateUserDto[]): Promise<User[]> {
@@ -30,10 +31,10 @@ export class UserService {
       image: create.image,
       user_id: create.user_id,
       school_id: create.school_id,
-      id: this.generateUserId(),
+      id: create.id,
     }));
     const jobs = payloads.map((data) => ({
-      name: 'create-user',
+      name: 'save-user',
       data,
     }));
 
@@ -41,9 +42,9 @@ export class UserService {
     return payloads as User[];
   }
 
-  async updateUser(tableId: string, payload: UpdateUserDto): Promise<User> {
+  async updateUser(payload: UpdateUserDto): Promise<User> {
     const data: Partial<User> = {
-      id: tableId,
+      id: payload?.id,
       name: payload.name,
       type: payload.type,
       image: payload.image,
@@ -51,7 +52,10 @@ export class UserService {
       school_id: payload.school_id,
     };
 
-    await this.userQueue.add('update-user', data);
+    await this.userQueue.add('update-user', data, {
+      priority: 4,
+      jobId: `update-user-${payload.user_id}`,
+    });
 
     return { ...data } as User;
   }
@@ -74,9 +78,5 @@ export class UserService {
     await this.userQueue.addBulk(jobs);
 
     return payloads as User[];
-  }
-
-  private generateUserId(): string {
-    return uuidv4();
   }
 }

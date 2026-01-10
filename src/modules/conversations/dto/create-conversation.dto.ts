@@ -3,7 +3,6 @@ import {
   IsInt,
   IsNotEmpty,
   IsOptional,
-  IsString,
   IsDateString,
   IsUUID,
 } from 'class-validator';
@@ -35,10 +34,6 @@ export class CreateConversationDto {
   last_message_id?: string;
 
   @IsOptional()
-  @IsString()
-  last_message?: string;
-
-  @IsOptional()
   @IsInt()
   last_message_sender_id?: number;
 
@@ -46,7 +41,11 @@ export class CreateConversationDto {
   @IsInt()
   last_message_receiver_id?: number;
 
-  @IsOptional()
   @IsDateString()
-  last_message_seen_at?: Date;
+  @IsOptional()
+  created_at?: Date;
+
+  @IsDateString()
+  @IsOptional()
+  updated_at?: Date;
 }

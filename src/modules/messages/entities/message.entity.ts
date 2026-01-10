@@ -1,6 +1,5 @@
 import {
   Entity,
-  PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
   UpdateDateColumn,
@@ -13,6 +12,7 @@ import {
 import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
+import { IsUUID } from 'class-validator';
 
 @Entity('messages')
 @Index('idx_conversation_id', ['conversation_id'])
@@ -23,11 +23,12 @@ import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
 @Index('idx_conversation_created', ['conversation_id', 'created_at'])
 @Index('idx_seen_at', ['seen_at'])
 export class Message {
-  @PrimaryColumn('varchar', { length: 36 })
+  @PrimaryColumn('uuid')
+  @IsUUID()
   id: string;
 
-  @Column({ type: 'int', nullable: false })
-  conversation_id: number;
+  @Column({ type: 'string', nullable: false })
+  conversation_id: string;
 
   @Column({ type: 'int' })
   school_id: number;
@@ -38,8 +39,8 @@ export class Message {
   @Column({ type: 'int', nullable: true })
   receiver_id: number;
 
-  @Column({ type: 'int', nullable: true })
-  group_id: number;
+  @Column({ type: 'string', nullable: true })
+  group_id: string;
 
   @Column({
     type: 'text',
@@ -57,12 +58,6 @@ export class Message {
 
   @DeleteDateColumn({ name: 'deleted_at', type: 'timestamp', nullable: true })
   deleted_at: Date;
-
-  @Column({ name: 'removed_at', type: 'timestamp', nullable: true })
-  removed_at: Date;
-
-  @Column({ name: 'delivered_at', type: 'timestamp', nullable: true })
-  delivered_at: Date;
 
   @CreateDateColumn({ type: 'timestamp' })
   created_at: Date;

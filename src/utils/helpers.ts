@@ -28,7 +28,7 @@ export async function executeWithRetry<T>(
   throw lastError;
 }
 
-export function escape(value: any): string {
+export function escapeValue(value: any): string {
   if (value === null) return 'NULL';
   if (typeof value === 'number') return value.toString();
   return `'${String(value).replace(/'/g, "''")}'`;

@@ -1,4 +1,5 @@
 import {
+  IsDateString,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -32,4 +33,12 @@ export class CreateUserDto {
   @IsEnum(UserType)
   @IsNotEmpty()
   type: UserType;
+
+  @IsDateString()
+  @IsOptional()
+  created_at?: string;
+
+  @IsDateString()
+  @IsOptional()
+  updated_at?: string;
 }

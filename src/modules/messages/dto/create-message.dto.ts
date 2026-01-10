@@ -23,17 +23,13 @@ export class CreateMessageDto {
   @IsNotEmpty()
   sender_id: number;
   
+  @IsString()
+  @IsNotEmpty()
+  conversation_id: string
+
   @IsInt()
   @IsNotEmpty()
-  conversation_id: number
-
-  @IsInt()
-  @IsOptional()
-  receiver_id?: number;
-
-  @IsInt()
-  @IsOptional()
-  group_id?: number;
+  receiver_id: number;
 
   @ValidateIf(o => !o.attachments || o.attachments.length === 0)
   @IsString()

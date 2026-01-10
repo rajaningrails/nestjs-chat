@@ -14,7 +14,7 @@ export class UserController {
     private readonly getUserUseCase: GetUserUseCase,
   ) {}
 
-  @Post()
+  @Post('create')
   async create(@Body() createUserDto: CreateUserDto): Promise<User> {
     const user = await this.createUserUseCase.execute(createUserDto);
     return user;
@@ -31,4 +31,6 @@ export class UserController {
     const user = await this.getUserUseCase.execute(id);
     return user;
   }
+
+  
 }

@@ -1,6 +1,5 @@
 import {
   Entity,
-  PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
   UpdateDateColumn,
@@ -8,11 +7,13 @@ import {
   ManyToOne,
   JoinColumn,
   OneToMany,
+  PrimaryColumn,
 } from 'typeorm';
 import { ConversationType, GroupType } from '../dto/conversations.enum';
 import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
 import { Message } from 'src/modules/messages/entities/message.entity';
 import { IsUUID } from 'class-validator';
+import { GroupMessageSeen } from 'src/modules/group/entities/chat-group-message-seen.entity';
 
 @Entity('conversations')
 @Index('idx_school_id', ['school_id'])
@@ -22,7 +23,7 @@ import { IsUUID } from 'class-validator';
 @Index('idx_participants', ['school_id', 'type'])
 @Index('idx_updated_at', ['updated_at'])
 export class Conversation {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn('uuid')
   @IsUUID()
   id: string;
 
@@ -41,17 +42,11 @@ export class Conversation {
   @Column({ type: 'varchar', nullable: true })
   last_message_id: string;
 
-  @Column({ type: 'text', nullable: true })
-  last_message: string;
-
   @Column({ type: 'int', nullable: true })
   last_message_sender_id: number;
 
   @Column({ type: 'int', nullable: true })
   last_message_receiver_id: number;
-
-  @Column({ type: 'timestamp', nullable: true })
-  last_message_seen_at: Date | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   created_at: Date;
@@ -62,9 +57,9 @@ export class Conversation {
   @UpdateDateColumn({ name: 'deleted_at', type: 'timestamp', nullable: true })
   deleted_at: Date;
 
-  @ManyToOne(() => ChatGroup, (group) => group.conversations, { 
+  @ManyToOne(() => ChatGroup, (group) => group.conversations, {
     nullable: true,
-    onDelete: 'SET NULL'
+    onDelete: 'SET NULL',
   })
   @JoinColumn({ name: 'group_id', referencedColumnName: 'id' })
   group: ChatGroup;
@@ -72,10 +67,13 @@ export class Conversation {
   @OneToMany(() => Message, (message) => message.conversation)
   messages: Message[];
 
-  @ManyToOne(() => Message, { 
+  @ManyToOne(() => Message, {
     nullable: true,
-    onDelete: 'SET NULL'
+    onDelete: 'SET NULL',
   })
   @JoinColumn({ name: 'last_message_id', referencedColumnName: 'id' })
   lastMessage?: Message;
+
+  @OneToMany(() => GroupMessageSeen, (seen) => seen.conversation)
+  seen_messages: GroupMessageSeen[];
 }

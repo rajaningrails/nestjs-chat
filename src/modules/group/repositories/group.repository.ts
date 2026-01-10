@@ -9,6 +9,7 @@ import {
 } from './group.repository.interface';
 import { CreateChatGroupDto, UpdateGroupDto } from '../dto/chat-group.dto';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
+import { CreateChatGroupMemberDto } from '../dto/chat-group-member.dto';
 
 @Injectable()
 export class GroupRepository implements IGroupRepository {
@@ -18,6 +19,49 @@ export class GroupRepository implements IGroupRepository {
     @InjectRepository(ChatGroupMember)
     private readonly groupMemberRepo: Repository<ChatGroupMember>,
   ) {}
+  async upsertBatch(groups: any[]): Promise<void> {
+    if (!groups.length) return;
+
+    const values = groups.map((g) => ({
+      id: g.id || g.group_id,
+      school_id: g.school_id,
+      group_name: g.group_name?.trim(),
+      group_image: g.group_image,
+      created_by: g.created_by,
+    }));
+
+    await this.groupRepo
+      .createQueryBuilder()
+      .insert()
+      .into(ChatGroup)
+      .values(values)
+      .orUpdate(['group_name', 'group_image'], ['id'])
+      .execute();
+  }
+
+  async removeMembers(groupId: string, userIds: number[]): Promise<void> {
+    if (!userIds.length) return;
+    await this.groupMemberRepo.delete({
+      group_id: groupId,
+      user_id: Not(In(userIds)),
+    });
+  }
+
+  async upsertMemberBatch(members: ChatGroupMember[]): Promise<void> {
+    if (!members.length) return;
+    const values: CreateChatGroupMemberDto[] = members.map((m) => ({
+      group_id: m.group_id,
+      user_id: m.user_id,
+      id: m.id,
+    }));
+    await this.groupMemberRepo
+      .createQueryBuilder()
+      .insert()
+      .into(ChatGroupMember)
+      .values(values)
+      .orIgnore()
+      .execute();
+  }
 
   async findGroupByName(
     group_name: string,
@@ -27,7 +71,7 @@ export class GroupRepository implements IGroupRepository {
       where: {
         group_name: group_name?.trim()?.toLowerCase(),
         deleted_at: IsNull(),
-        ...(group_id && { id: Not(group_id) }) as any,
+        ...((group_id && { id: Not(group_id) }) as any),
       },
     });
 

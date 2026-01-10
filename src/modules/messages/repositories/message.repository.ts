@@ -10,7 +10,7 @@ export class MessageRepository implements IMessageRepository {
   constructor(
     @InjectRepository(Message)
     private readonly messageRepository: Repository<Message>,
-  ) { }
+  ) {}
 
   async findByConversation(
     senderId: number,
@@ -39,12 +39,50 @@ export class MessageRepository implements IMessageRepository {
   async findById(id: any): Promise<Message | null> {
     return this.messageRepository.findOne({
       where: { id },
+      withDeleted: false,
     });
   }
 
   async save(messageData: Partial<CreateMessageDto>): Promise<Message> {
     const message = this.messageRepository.create(messageData);
     return this.messageRepository.save(message);
+  }
+
+  async countConversationMessage(conversationId: string): Promise<number> {
+    return this.messageRepository.count({
+      where: { conversation_id: conversationId },
+    });
+  }
+
+  async getConversationMessages(
+    conversation_id: string,
+    limit = 25,
+    offset = 0,
+  ): Promise<Message[]> {
+    return await this.messageRepository
+      .createQueryBuilder('m')
+      .leftJoinAndSelect('m.sender', 'sender')
+      .leftJoinAndSelect('m.receiver', 'receiver')
+      .leftJoinAndSelect('m.attachments', 'attachments')
+      .where('m.conversation_id = :conversation_id', { conversation_id })
+      .orderBy('m.created_at', 'DESC')
+      .take(limit)
+      .skip(offset)
+      .getMany();
+  }
+  async upsertBatch(messages: Message[]): Promise<void> {
+    if (!messages.length) return;
+    try {
+      await this.messageRepository
+        .createQueryBuilder()
+        .insert()
+        .into(Message)
+        .values(messages)
+        .orUpdate(['seen_at', 'deleted_at'], ['id'])
+        .execute();
+    } catch (error) {
+      throw error;
+    }
   }
 
   async update(
@@ -64,6 +102,18 @@ export class MessageRepository implements IMessageRepository {
     return !!result.affected;
   }
 
+  async deleteBatch(ids: string[]): Promise<void> {
+    try {
+      await this.messageRepository
+        .createQueryBuilder()
+        .softDelete()
+        .where('id IN (:...ids)', { ids })
+        .execute();
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async saveBatch(messages: Partial<Message>[]): Promise<void> {
     if (messages.length === 0) return;
 
@@ -79,54 +129,10 @@ export class MessageRepository implements IMessageRepository {
     }
   }
 
-
-  async findUndeliveredForUser(userId: number): Promise<Message[]> {
-    try {
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-      const messages = await this.messageRepository
-        .createQueryBuilder('message')
-        .where('message.receiver_id = :userId', { userId })
-        .andWhere('message.seen_at IS NULL')
-        .andWhere('message.delivered_at IS NULL')
-        .andWhere('message.created_at >= :sevenDaysAgo', { sevenDaysAgo })
-        .andWhere('message.deleted_at IS NULL')
-        .orderBy('message.created_at', 'ASC')
-        .limit(100)
-        .getMany();
-
-
-      if (messages.length > 0) {
-        const messageIds = messages.map(m => m.id);
-        await this.markAsDelivered(messageIds);
-      }
-
-      return messages;
-    } catch (error) {
-      return [];
-    }
-  }
-
-  async markAsDelivered(messageIds: string[]): Promise<void> {
-    try {
-      if (messageIds.length === 0) return;
-
-      await this.messageRepository
-        .createQueryBuilder()
-        .update(Message)
-        .set({ delivered_at: new Date() })
-        .where('id IN (:...messageIds)', { messageIds })
-        .execute();
-
-    } catch (error) {
-    }
-  }
-
   async searchMessages(
     userId: number,
     query: string,
-    limit: number = 50
+    limit: number = 50,
   ): Promise<Message[]> {
     try {
       return await this.messageRepository
@@ -134,7 +140,7 @@ export class MessageRepository implements IMessageRepository {
         .leftJoinAndSelect('message.conversation', 'conversation')
         .where(
           '(message.sender_id = :userId OR message.receiver_id = :userId)',
-          { userId }
+          { userId },
         )
         .andWhere('message.message ILIKE :query', { query: `%${query}%` })
         .andWhere('message.deleted_at IS NULL')
@@ -145,7 +151,6 @@ export class MessageRepository implements IMessageRepository {
       return [];
     }
   }
-
 
   async cleanupOldMessages(daysOld: number = 90): Promise<number> {
     try {

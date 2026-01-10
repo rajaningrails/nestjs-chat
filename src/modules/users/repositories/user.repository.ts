@@ -71,7 +71,7 @@ export class UserRepository implements IUserRepository {
         .insert()
         .into(User)
         .values(chunk)
-        .orIgnore()
+        .orUpdate(['name', 'image', 'type'], ['user_id'])
         .execute();
     }
   }

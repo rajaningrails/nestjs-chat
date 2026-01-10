@@ -31,7 +31,7 @@ import { conversationQueueConfig, messageQueueConfig } from 'src/infrastructure/
     ConversationRepository,
     MessageService,
     MessageProcessor,
-    MessageGateway,
+    // MessageGateway,
     ConversationService
   ],
   exports: [IMessageRepositoryToken, MessageRepository],

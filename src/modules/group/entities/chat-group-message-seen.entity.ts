@@ -12,6 +12,7 @@ import {
 import { ChatGroup } from './chat-group.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import { IsUUID } from 'class-validator';
+import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
 
 @Entity('group_message_seen')
 @Index(['conversation_id', 'message_id', 'user_id'], { unique: true })
@@ -47,4 +48,8 @@ export class GroupMessageSeen {
   @ManyToOne(() => User)
   @JoinColumn({ name: 'user_id', referencedColumnName: 'user_id' })
   user: User;
+
+  @ManyToOne(() => Conversation, (conversation) => conversation.seen_messages, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'conversation_id', referencedColumnName: 'id' })
+  conversation: Conversation;
 }

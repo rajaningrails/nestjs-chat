@@ -1,172 +1,275 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Injectable, Logger } from '@nestjs/common';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Job, Queue } from 'bullmq';
-import { InjectQueue } from '@nestjs/bullmq';
+import { MessageProcessorConfig } from 'src/infrastructure/bullmq/size-queue.config';
+import { Redis } from 'ioredis';
 import { MessageRepository } from '../repositories/message.repository';
-import { Message } from '../entities/message.entity';
-import { ConversationRepository } from 'src/modules/conversations/repositories/conversation.repository';
+import { MessageDto } from '../dto/message.dto';
 
-interface ConversationUpdateData {
-  conversationId: number;
-  messageId: string;
-  message: string | null;
-  sender_id: number;
-  receiver_id: number;
-  createdAt: Date;
-}
-
-interface MessageWithUpdate extends Partial<Message> {
-  _conversationUpdate?: ConversationUpdateData;
-}
-
-@Processor('messages', {
-  concurrency: 10,
+@Processor(MessageProcessorConfig.queue_name, {
+  concurrency: MessageProcessorConfig.no_of_jobs,
   limiter: {
-    max: 100,
+    max: MessageProcessorConfig.max_no_of_job_per_second,
     duration: 1000,
   },
 })
 @Injectable()
-export class MessageProcessor extends WorkerHost {
+export class MessageProcessor
+  extends WorkerHost
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(MessageProcessor.name);
-  private messageBatch: Partial<Message>[] = [];
-  private conversationUpdates: ConversationUpdateData[] = [];
-  private batchTimer: NodeJS.Timeout | null = null;
-  private readonly BATCH_SIZE = 50;
-  private readonly BATCH_TIMEOUT = 2000;
+
+  private readonly CREATE_BUFFER_KEY = 'buffer:message:create';
+  private readonly DELETE_BUFFER_KEY = 'buffer:message:create';
+  private readonly UPDATE_BUFFER_KEY = 'buffer:message:update';
+  private readonly CREATE_LOCK_KEY = 'lock:message:create:flush';
+  private readonly UPDATE_LOCK_KEY = 'lock:message:update:flush';
+  private readonly DELETE_LOCK_KEY = 'lock:message:delete:flush';
+
+  private readonly BATCH_SIZE = MessageProcessorConfig.batch_size || 100;
+  private readonly FLUSH_INTERVAL =
+    MessageProcessorConfig.batch_timeout ?? 5000;
+  private readonly LOCK_TTL = 30000; // 30 seconds
+
+  private flushInterval: NodeJS.Timeout | null = null;
+  private redis: Redis;
 
   constructor(
+    @InjectQueue(MessageProcessorConfig.queue_name) private messageQueue: Queue,
     private readonly messageRepository: MessageRepository,
-    private readonly conversationRepository: ConversationRepository,
-    @InjectQueue('messages') private messageQueue: Queue,
   ) {
     super();
   }
 
-  async process(job: Job): Promise<any> {
+  async onModuleInit() {
+    this.redis = (await this.messageQueue.client) as Redis;
+
+    this.flushInterval = setInterval(async () => {
+      try {
+        await Promise.all([this.flushCreateBuffer(), this.flushUpdateBuffer()]);
+      } catch (error) {
+        this.logger.error('Periodic flush failed', error);
+      }
+    }, this.FLUSH_INTERVAL);
+
+    this.logger.log('Message Processor initialized with Redis batching');
+  }
+
+  async process(job: Job) {
     const { name, data } = job;
 
     try {
       switch (name) {
         case 'save-message':
-          return await this.saveMessage(data);
-        case 'mark-seen':
-          return await this.markSeen(data);
+          return await this.bufferCreate(data);
+        case 'update-message':
+          return await this.bufferUpdate(data);
         case 'delete-message':
-          return await this.deleteMessage(data);
-        case 'update-conversation':
-          return await this.updateConversation(data);
+          return await this.bufferDelete(data);
         default:
           throw new Error(`Unknown job type: ${name}`);
       }
     } catch (error) {
-      this.logger.error(`Job ${name} failed:`, error);
+      this.logger.error(`Job ${name} failed`, error);
       throw error;
     }
   }
 
-  private async saveMessage(data: MessageWithUpdate) {
-    const conversationUpdate = data._conversationUpdate;
-    const { _conversationUpdate, ...messageData } = data;
-    this.messageBatch.push(messageData);
-    if (conversationUpdate) {
-      this.conversationUpdates.push(conversationUpdate);
+  private async bufferCreate(data: MessageDto) {
+    await this.redis.lpush(this.CREATE_BUFFER_KEY, JSON.stringify(data));
+
+    const count = await this.redis.llen(this.CREATE_BUFFER_KEY);
+
+    if (count >= this.BATCH_SIZE) {
+      this.flushCreateBuffer().catch((err) =>
+        this.logger.error('Async flush failed', err),
+      );
     }
 
-    if (this.messageBatch.length >= this.BATCH_SIZE) {
-      await this.flushBatch();
-    } else if (!this.batchTimer) {
-      this.batchTimer = setTimeout(() => this.flushBatch(), this.BATCH_TIMEOUT);
-    }
-
-    return { success: true };
+    return { success: true, buffered: true, operation: 'create' };
   }
 
-  private async flushBatch() {
-    if (this.messageBatch.length === 0) return;
+  private async bufferUpdate(data: Partial<MessageDto>) {
+    if (!data.id) {
+      throw new Error('message id is required for updates');
+    }
 
-    const batch = [...this.messageBatch];
-    const updates = [...this.conversationUpdates];
-    this.messageBatch = [];
-    this.conversationUpdates = [];
-    if (this.batchTimer) {
-      clearTimeout(this.batchTimer);
-      this.batchTimer = null;
+    await this.redis.hset(
+      this.UPDATE_BUFFER_KEY,
+      data.id.toString(),
+      JSON.stringify(data),
+    );
+
+    const count = await this.redis.hlen(this.UPDATE_BUFFER_KEY);
+
+    if (count >= this.BATCH_SIZE) {
+      this.flushUpdateBuffer().catch((err) =>
+        this.logger.error('Async update flush failed', err),
+      );
+    }
+
+    return { success: true, buffered: true, operation: 'update' };
+  }
+
+  private async flushCreateBuffer() {
+    const lockAcquired = await this.redis.set(
+      this.CREATE_LOCK_KEY,
+      Date.now().toString(),
+      'PX',
+      this.LOCK_TTL,
+      'NX',
+    );
+
+    if (!lockAcquired) {
+      return;
     }
 
     try {
-      await this.messageRepository.saveBatch(batch);
+      const result = await this.redis
+        .multi()
+        .lrange(this.CREATE_BUFFER_KEY, 0, -1)
+        .del(this.CREATE_BUFFER_KEY)
+        .exec();
 
-      if (updates.length > 0) {
-        const latestUpdates = new Map<number, ConversationUpdateData>();
+      const rawData = result?.[0]?.[1] as string[];
 
-        updates.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-        for (const update of updates) {
-          const convId = update.conversationId;
-          if (!latestUpdates.has(convId)) {
-            latestUpdates.set(convId, update);
-          }
-        }
-
-        const jobs = Array.from(latestUpdates.values()).map((update) => ({
-          name: 'update-conversation',
-          data: update,
-          opts: {
-            priority: 2,
-            attempts: 3,
-            backoff: {
-              type: 'exponential' as const,
-              delay: 1000,
-            },
-          },
-        }));
-
-        await this.messageQueue.addBulk(jobs);
+      if (!rawData || rawData.length === 0) {
+        return;
       }
-    } catch (error) {
-      for (let i = 0; i < batch.length; i++) {
-        const msg = batch[i];
-        try {
-          await this.messageRepository.save(msg);
-          if (updates[i]) {
-            await this.messageQueue.add('update-conversation', updates[i], {
-              priority: 2,
-              attempts: 3,
-            });
-          }
-        } catch (err) {
-          // Handle err
-        }
+
+      const batch = rawData.map((item) => JSON.parse(item));
+      try {
+        await this.messageRepository.upsertBatch(batch);
+      } catch (error) {
+        await this.moveToDLQ('create', batch, error);
       }
+    } finally {
+      await this.redis.del(this.CREATE_LOCK_KEY);
     }
   }
 
-  private async markSeen(data: { message_id: string; seenAt: Date }) {
-    await this.messageRepository.markAsSeen(data.message_id, data.seenAt);
-    return { success: true };
-  }
+  private async flushUpdateBuffer() {
+    const lockAcquired = await this.redis.set(
+      this.UPDATE_LOCK_KEY,
+      Date.now().toString(),
+      'PX',
+      this.LOCK_TTL,
+      'NX',
+    );
 
-  private async deleteMessage(data: { message_id: string }) {
-    const deleted = await this.messageRepository.softDelete(data.message_id);
-    return { success: deleted };
-  }
+    if (!lockAcquired) {
+      return;
+    }
 
-  private async updateConversation(data: ConversationUpdateData) {
     try {
-      await this.conversationRepository.updateLastMessageSafe(data);
-      return { success: true };
-    } catch (error) {
-      throw error;
+      const result = await this.redis
+        .multi()
+        .hgetall(this.UPDATE_BUFFER_KEY)
+        .del(this.UPDATE_BUFFER_KEY)
+        .exec();
+
+      const hashData = result?.[0]?.[1] as Record<string, string>;
+
+      if (!hashData || Object.keys(hashData).length === 0) {
+        return;
+      }
+
+      const batch = Object.values(hashData).map((item) => JSON.parse(item));
+
+      try {
+        await this.messageRepository.upsertBatch(batch);
+      } catch (error) {
+        await this.moveToDLQ('update', batch, error);
+      }
+    } finally {
+      await this.redis.del(this.UPDATE_LOCK_KEY);
     }
+  }
+
+  private async bufferDelete(data: { id: number | string }) {
+    if (!data.id) {
+      throw new Error('message id is required for deletes');
+    }
+
+    await this.redis.sadd(this.DELETE_BUFFER_KEY, data.id.toString());
+
+    const count = await this.redis.scard(this.DELETE_BUFFER_KEY);
+
+    if (count >= this.BATCH_SIZE) {
+      this.flushDeleteBuffer().catch((err) =>
+        this.logger.error('Async delete flush failed', err),
+      );
+    }
+
+    return { success: true, buffered: true, operation: 'delete' };
+  }
+
+  private async flushDeleteBuffer() {
+    const lockAcquired = await this.redis.set(
+      this.DELETE_LOCK_KEY,
+      Date.now().toString(),
+      'PX',
+      this.LOCK_TTL,
+      'NX',
+    );
+
+    if (!lockAcquired) {
+      return;
+    }
+
+    try {
+      const result = await this.redis
+        .multi()
+        .smembers(this.DELETE_BUFFER_KEY)
+        .del(this.DELETE_BUFFER_KEY)
+        .exec();
+
+      const ids = result?.[0]?.[1] as string[];
+
+      if (!ids || ids.length === 0) {
+        return;
+      }
+
+      try {
+        await this.messageRepository.deleteBatch(ids);
+      } catch (error) {
+        await this.moveToDLQ('delete', ids, error);
+      }
+    } finally {
+      await this.redis.del(this.DELETE_LOCK_KEY);
+    }
+  }
+
+  private async moveToDLQ(
+    operation: 'create' | 'update' | 'delete',
+    data: any[],
+    error: any,
+  ) {
+    const dlqKey = `dlq:message:${operation}`;
+
+    const entry = {
+      operation,
+      failedAt: new Date().toISOString(),
+      error: error?.message || 'Unknown error',
+      stack: error?.stack,
+      dataCount: data.length,
+      data,
+    };
+
+    await this.redis.lpush(dlqKey, JSON.stringify(entry));
   }
 
   async onModuleDestroy() {
-    if (this.batchTimer) {
-      clearTimeout(this.batchTimer);
+    if (this.flushInterval) {
+      clearInterval(this.flushInterval);
     }
-    if (this.messageBatch.length > 0) {
-      await this.flushBatch();
-    }
+
+    await Promise.all([this.flushCreateBuffer(), this.flushUpdateBuffer()]);
   }
 }

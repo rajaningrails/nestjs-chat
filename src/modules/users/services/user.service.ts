@@ -72,7 +72,7 @@ export class UserService {
 
     const jobs = updates.map((update) => ({
       name: 'update-user',
-      data: updates,
+      data: update,
     }));
 
     await this.userQueue.addBulk(jobs);

@@ -10,7 +10,6 @@ export class MessageRepository implements IMessageRepository {
   constructor(
     @InjectRepository(Message)
     private readonly messageRepository: Repository<Message>,
-    private readonly
   ) {}
 
   async findByConversation(

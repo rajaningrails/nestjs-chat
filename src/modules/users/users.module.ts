@@ -9,6 +9,7 @@ import { UserRepository } from './repositories/user.repository';
 import { UpdateUserUseCase } from './use-cases/update-user.use-case';
 import { userQueueConfig } from 'src/infrastructure/bullmq';
 import { ScheduleModule } from '@nestjs/schedule';
+import { UserService } from './services/user.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([User]), userQueueConfig, ScheduleModule.forRoot()],
@@ -20,10 +21,11 @@ import { ScheduleModule } from '@nestjs/schedule';
     },
     CreateUserUseCase,
     GetUserUseCase,
+    UserService,
     UpdateUserUseCase,
     UserRepository
   ],
-  exports: [IUserRepositoryToken, CreateUserUseCase, UserRepository],
+  exports: [IUserRepositoryToken, CreateUserUseCase, UserRepository,UserService],
 })
 
 export class UsersModule { }

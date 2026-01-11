@@ -11,14 +11,16 @@ import { UsersModule } from '../users/users.module';
 import { IGroupRepositoryToken } from './repositories/group.repository.interface';
 import { UpdateGroupUseCase } from './use-cases/update-group.use-case';
 import { groupQueueConfig } from 'src/infrastructure/bullmq';
+import { GroupService } from './service/group.service';
+import { GroupMessageSeen } from './entities/chat-group-message-seen.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ChatGroup, ChatGroupMember]),
-    ConversationsModule, 
+    TypeOrmModule.forFeature([ChatGroup, ChatGroupMember, GroupMessageSeen]),
+    ConversationsModule,
     MessageModule,
     UsersModule,
-    groupQueueConfig      
+    groupQueueConfig,
   ],
   controllers: [GroupController],
   providers: [
@@ -28,6 +30,9 @@ import { groupQueueConfig } from 'src/infrastructure/bullmq';
       provide: IGroupRepositoryToken,
       useClass: GroupRepository,
     },
+    GroupRepository,
+    GroupService,
   ],
+  exports: [GroupRepository, GroupService],
 })
 export class GroupModule {}

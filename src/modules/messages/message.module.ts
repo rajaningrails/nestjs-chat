@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Message } from './entities/message.entity';
 import { MessageController } from './message.controller';
@@ -6,19 +6,18 @@ import { MessageRepository } from './repositories/message.repository';
 import { IMessageRepositoryToken } from './repositories/message.repository.interface';
 import { MessageService } from './services/message.service';
 import { MessageProcessor } from './processor/message.processor';
-import { MessageGateway } from './gateway/message.gateway';
 import { User } from '../users/entities/user.entity';
 import { Conversation } from '../conversations/entities/conversation.entity';
-import { UserRepository } from '../users/repositories/user.repository';
-import { ConversationRepository } from '../conversations/repositories/conversation.repository';
-import { ConversationService } from '../conversations/services/conversation.service';
-import { conversationQueueConfig, messageQueueConfig } from 'src/infrastructure/bullmq';
+import { messageQueueConfig } from 'src/infrastructure/bullmq';
+import { ConversationsModule } from '../conversations/conversation.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Message,User,Conversation]),
     messageQueueConfig,
-    conversationQueueConfig
+    forwardRef(() => ConversationsModule),
+    UsersModule    
   ],
   controllers: [MessageController],
   providers: [
@@ -27,13 +26,10 @@ import { conversationQueueConfig, messageQueueConfig } from 'src/infrastructure/
       useClass: MessageRepository,
     },
     MessageRepository,
-    UserRepository,
-    ConversationRepository,
     MessageService,
     MessageProcessor,
     // MessageGateway,
-    ConversationService
   ],
-  exports: [IMessageRepositoryToken, MessageRepository],
+  exports: [IMessageRepositoryToken, MessageRepository, MessageService],
 })
 export class MessageModule {}

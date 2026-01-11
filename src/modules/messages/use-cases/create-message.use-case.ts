@@ -1,6 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Injectable, Inject, BadRequestException } from '@nestjs/common';
-import { IMessageRepositoryToken } from '../repositories/message.repository.interface';
 import { MessageService } from '../services/message.service';
 import { CreateMessageDto } from '../dto/create-message.dto';
 import { ConversationRepository } from 'src/modules/conversations/repositories/conversation.repository';
@@ -9,11 +8,12 @@ import { ConversationType } from 'src/modules/conversations/dto/conversations.en
 import { UserService } from 'src/modules/users/services/user.service';
 import { CreateUserDto } from 'src/modules/users/dto/create-user.dto';
 import { profanity } from '@2toad/profanity';
+import { IConversationRepositoryToken } from 'src/modules/conversations/repositories/conversation.repository.interface';
 
 @Injectable()
 export class CreateMessageUseCase {
   constructor(
-    @Inject(IMessageRepositoryToken)
+    @Inject(IConversationRepositoryToken)
     private readonly conversationRepository: ConversationRepository,
     private readonly conversationService: ConversationService,
     private readonly messageService: MessageService,

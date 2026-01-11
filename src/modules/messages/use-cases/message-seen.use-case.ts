@@ -8,8 +8,8 @@ import { MessageRepository } from '../repositories/message.repository';
 export class MessageSeenUseCase {
   constructor(
     @Inject(IMessageRepositoryToken)
-    private readonly messageService: MessageService,
     private readonly messageRepository: MessageRepository,
+    private readonly messageService: MessageService,
   ) {}
 
   async execute(request: SeenMessageDto) {

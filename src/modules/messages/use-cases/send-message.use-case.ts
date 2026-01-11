@@ -12,15 +12,18 @@ import { UserRepository } from 'src/modules/users/repositories/user.repository';
 import { MessageDto } from '../dto/message.dto';
 import { ConversationRepository } from 'src/modules/conversations/repositories/conversation.repository';
 import { profanity } from '@2toad/profanity';
+import { IUserRepositoryToken } from 'src/modules/users/repositories/user.repository.interface';
+import { IConversationRepositoryToken } from 'src/modules/conversations/repositories/conversation.repository.interface';
 
 @Injectable()
 export class SendMessageUseCase {
   constructor(
-    @Inject(IMessageRepositoryToken)
+    @Inject(IConversationRepositoryToken)
+    private readonly conversationRepository: ConversationRepository,
+    @Inject(IUserRepositoryToken)
+    private readonly userRepository: UserRepository,
     private readonly messagesService: MessageService,
     private readonly conversationService: ConversationService,
-    private readonly conversationRepository: ConversationRepository,
-    private readonly userRepository: UserRepository,
   ) {}
 
   async execute(request: MessageDto) {

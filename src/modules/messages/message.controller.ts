@@ -4,19 +4,15 @@ import {
   Post,
   Body,
   Param,
-  Query,
   Inject,
   ParseUUIDPipe,
   Delete,
 } from '@nestjs/common';
 import type { IMessageRepository } from './repositories/message.repository.interface';
 import { IMessageRepositoryToken } from './repositories/message.repository.interface';
-import { MessageService } from './services/message.service';
-import { MessageDto } from './dto/message.dto';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { SendMessageUseCase } from './use-cases/send-message.use-case';
-import { Message } from './entities/message.entity';
 import { CreateMessageUseCase } from './use-cases/create-message.use-case';
 import { DeleteMessageUseCase } from './use-cases/delete-message.use-case';
 import { DeleteMessageDto } from './dto/delete-message.dto';
@@ -28,8 +24,6 @@ export class MessageController {
   constructor(
     @Inject(IMessageRepositoryToken)
     private readonly messageRepository: IMessageRepository,
-    private readonly messageService: MessageService,
-
     private readonly sendMessageUseCase: SendMessageUseCase,
     private readonly createMessageUseCase: CreateMessageUseCase,
     private readonly deleteMessageUseCase: DeleteMessageUseCase,

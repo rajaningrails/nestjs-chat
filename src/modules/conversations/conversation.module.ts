@@ -6,9 +6,14 @@ import { ConversationRepository } from './repositories/conversation.repository';
 import { Conversation } from './entities/conversation.entity';
 import { ConversationService } from './services/conversation.service';
 import { conversationQueueConfig } from 'src/infrastructure/bullmq';
+import { MessageModule } from '../messages/message.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Conversation]), conversationQueueConfig],
+  imports: [
+    TypeOrmModule.forFeature([Conversation]),
+    conversationQueueConfig,
+    MessageModule,
+  ],
   controllers: [ConversationController],
   providers: [
     {
@@ -18,6 +23,7 @@ import { conversationQueueConfig } from 'src/infrastructure/bullmq';
     ConversationService,
     ConversationRepository,
   ],
-  exports: [IConversationRepositoryToken, ConversationRepository],
+  exports: [IConversationRepositoryToken, ConversationRepository,ConversationService],
 })
 export class ConversationsModule {}
+

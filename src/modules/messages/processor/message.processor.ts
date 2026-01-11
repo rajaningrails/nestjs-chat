@@ -24,23 +24,26 @@ export class MessageProcessor
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(MessageProcessor.name);
-
+  
+  // Buffer keys
   private readonly CREATE_BUFFER_KEY = 'buffer:message:create';
-  private readonly DELETE_BUFFER_KEY = 'buffer:message:create';
+  private readonly DELETE_BUFFER_KEY = 'buffer:message:delete';
   private readonly UPDATE_BUFFER_KEY = 'buffer:message:update';
   private readonly USER_SEEN_BUFFER_KEY = 'buffer:message:user-seen';
+  
+  // Lock keys
   private readonly CREATE_LOCK_KEY = 'lock:message:create:flush';
   private readonly UPDATE_LOCK_KEY = 'lock:message:update:flush';
   private readonly DELETE_LOCK_KEY = 'lock:message:delete:flush';
   private readonly USER_SEEN_LOCK_KEY = 'lock:message:user-seen:flush';
-
+  
   private readonly BATCH_SIZE = MessageProcessorConfig.batch_size || 100;
-  private readonly FLUSH_INTERVAL =
-    MessageProcessorConfig.batch_timeout ?? 5000;
-  private readonly LOCK_TTL = 30000; // 30 seconds
-
+  private readonly FLUSH_INTERVAL = MessageProcessorConfig.batch_timeout ?? 5000;
+  private readonly LOCK_TTL = 30000;
+  
   private flushInterval: NodeJS.Timeout | null = null;
   private redis: Redis;
+  private isShuttingDown = false;
 
   constructor(
     @InjectQueue(MessageProcessorConfig.queue_name) private messageQueue: Queue,
@@ -51,27 +54,44 @@ export class MessageProcessor
 
   async onModuleInit() {
     this.redis = (await this.messageQueue.client) as Redis;
-
+    
     this.flushInterval = setInterval(async () => {
+      if (this.isShuttingDown) return;
+      
       try {
-        await Promise.all([
-          this.flushCreateBuffer(),
-          this.flushUpdateBuffer(),
-          this.flushDeleteBuffer(),
-          this.flushUserMessageSeen(),
+        const [createLen, updateLen, deleteLen, userSeenLen] = await Promise.all([
+          this.redis.llen(this.CREATE_BUFFER_KEY),
+          this.redis.hlen(this.UPDATE_BUFFER_KEY),
+          this.redis.scard(this.DELETE_BUFFER_KEY),
+          this.redis.scard(this.USER_SEEN_BUFFER_KEY),
         ]);
+
+        const flushPromises: Promise<void>[] = [];
+        if (createLen > 0) flushPromises.push(this.flushCreateBuffer());
+        if (updateLen > 0) flushPromises.push(this.flushUpdateBuffer());
+        if (deleteLen > 0) flushPromises.push(this.flushDeleteBuffer());
+        if (userSeenLen > 0) flushPromises.push(this.flushUserMessageSeen());
+
+        if (flushPromises.length > 0) {
+          await Promise.all(flushPromises);
+        }
       } catch (error) {
         this.logger.error('Periodic flush failed', error);
       }
     }, this.FLUSH_INTERVAL);
-
+    
     this.logger.log('Message Processor initialized with Redis batching');
   }
 
   async process(job: Job) {
     const { name, data } = job;
-
+    
     try {
+      // Validate data before processing
+      if (!data) {
+        throw new Error(`Job ${name} has no data`);
+      }
+
       switch (name) {
         case 'save-message':
           return await this.bufferCreate(data);
@@ -91,22 +111,29 @@ export class MessageProcessor
   }
 
   private async bufferCreate(data: MessageDto) {
-    await this.redis.lpush(this.CREATE_BUFFER_KEY, JSON.stringify(data));
-
-    const count = await this.redis.llen(this.CREATE_BUFFER_KEY);
-
-    if (count >= this.BATCH_SIZE) {
-      this.flushCreateBuffer().catch((err) =>
-        this.logger.error('Async flush failed', err),
-      );
+    // Validation
+    if (!data) {
+      throw new Error('Message data is required for create');
     }
 
+    await this.redis.lpush(this.CREATE_BUFFER_KEY, JSON.stringify(data));
+    const count = await this.redis.llen(this.CREATE_BUFFER_KEY);
+    
+    if (count >= this.BATCH_SIZE) {
+      // Use setImmediate to avoid blocking
+      setImmediate(() => {
+        this.flushCreateBuffer().catch((err) =>
+          this.logger.error('Async flush failed', err),
+        );
+      });
+    }
+    
     return { success: true, buffered: true, operation: 'create' };
   }
 
   private async bufferUpdate(data: Partial<MessageDto>) {
-    if (!data.id) {
-      throw new Error('message id is required for updates');
+    if (!data?.id) {
+      throw new Error('Message id is required for updates');
     }
 
     await this.redis.hset(
@@ -114,16 +141,56 @@ export class MessageProcessor
       data.id.toString(),
       JSON.stringify(data),
     );
-
+    
     const count = await this.redis.hlen(this.UPDATE_BUFFER_KEY);
-
+    
     if (count >= this.BATCH_SIZE) {
-      this.flushUpdateBuffer().catch((err) =>
-        this.logger.error('Async update flush failed', err),
-      );
+      setImmediate(() => {
+        this.flushUpdateBuffer().catch((err) =>
+          this.logger.error('Async update flush failed', err),
+        );
+      });
+    }
+    
+    return { success: true, buffered: true, operation: 'update' };
+  }
+
+  private async bufferDelete(data: { id: number | string }) {
+    if (!data?.id) {
+      throw new Error('Message id is required for deletes');
     }
 
-    return { success: true, buffered: true, operation: 'update' };
+    await this.redis.sadd(this.DELETE_BUFFER_KEY, data.id.toString());
+    const count = await this.redis.scard(this.DELETE_BUFFER_KEY);
+    
+    if (count >= this.BATCH_SIZE) {
+      setImmediate(() => {
+        this.flushDeleteBuffer().catch((err) =>
+          this.logger.error('Async delete flush failed', err),
+        );
+      });
+    }
+    
+    return { success: true, buffered: true, operation: 'delete' };
+  }
+
+  private async bufferOneToOneSeen(data: { id: number | string }) {
+    if (!data?.id) {
+      throw new Error('Message id is required for seen');
+    }
+
+    await this.redis.sadd(this.USER_SEEN_BUFFER_KEY, data.id.toString());
+    const count = await this.redis.scard(this.USER_SEEN_BUFFER_KEY);
+    
+    if (count >= this.BATCH_SIZE) {
+      setImmediate(() => {
+        this.flushUserMessageSeen().catch((err) =>
+          this.logger.error('Async seen flush failed', err),
+        );
+      });
+    }
+    
+    return { success: true, buffered: true, operation: 'one-to-one-seen' };
   }
 
   private async flushCreateBuffer() {
@@ -136,9 +203,12 @@ export class MessageProcessor
     );
 
     if (!lockAcquired) {
+      this.logger.debug('Create flush already in progress, skipping');
       return;
     }
 
+    const startTime = Date.now();
+    
     try {
       const result = await this.redis
         .multi()
@@ -147,17 +217,41 @@ export class MessageProcessor
         .exec();
 
       const rawData = result?.[0]?.[1] as string[];
-
+      
       if (!rawData || rawData.length === 0) {
         return;
       }
 
-      const batch = rawData.map((item) => JSON.parse(item));
+      this.logger.log(`Flushing ${rawData.length} create operations`);
+
+      // Extend lock if needed for large batches
+      if (rawData.length > this.BATCH_SIZE * 2) {
+        await this.extendLock(this.CREATE_LOCK_KEY, this.LOCK_TTL);
+      }
+
+      const batch = rawData.map((item) => {
+        try {
+          return JSON.parse(item);
+        } catch (error) {
+          this.logger.error('Failed to parse message data', { item, error });
+          return null;
+        }
+      }).filter(Boolean);
+
+      if (batch.length === 0) {
+        return;
+      }
+
       try {
         await this.messageRepository.upsertBatch(batch);
+        this.logger.log(`Successfully flushed ${batch.length} create operations in ${Date.now() - startTime}ms`);
       } catch (error) {
+        this.logger.error('Create batch upsert failed, moving to DLQ', error);
         await this.moveToDLQ('create', batch, error);
       }
+    } catch (error) {
+      this.logger.error('Create flush operation failed', error);
+      throw error;
     } finally {
       await this.redis.del(this.CREATE_LOCK_KEY);
     }
@@ -173,8 +267,11 @@ export class MessageProcessor
     );
 
     if (!lockAcquired) {
+      this.logger.debug('Update flush already in progress, skipping');
       return;
     }
+
+    const startTime = Date.now();
 
     try {
       const result = await this.redis
@@ -184,39 +281,44 @@ export class MessageProcessor
         .exec();
 
       const hashData = result?.[0]?.[1] as Record<string, string>;
-
+      
       if (!hashData || Object.keys(hashData).length === 0) {
         return;
       }
 
-      const batch = Object.values(hashData).map((item) => JSON.parse(item));
+      const dataCount = Object.keys(hashData).length;
+      this.logger.log(`Flushing ${dataCount} update operations`);
+
+      if (dataCount > this.BATCH_SIZE * 2) {
+        await this.extendLock(this.UPDATE_LOCK_KEY, this.LOCK_TTL);
+      }
+
+      const batch = Object.values(hashData).map((item) => {
+        try {
+          return JSON.parse(item);
+        } catch (error) {
+          this.logger.error('Failed to parse update data', { item, error });
+          return null;
+        }
+      }).filter(Boolean);
+
+      if (batch.length === 0) {
+        return;
+      }
 
       try {
         await this.messageRepository.upsertBatch(batch);
+        this.logger.log(`Successfully flushed ${batch.length} update operations in ${Date.now() - startTime}ms`);
       } catch (error) {
+        this.logger.error('Update batch upsert failed, moving to DLQ', error);
         await this.moveToDLQ('update', batch, error);
       }
+    } catch (error) {
+      this.logger.error('Update flush operation failed', error);
+      throw error;
     } finally {
       await this.redis.del(this.UPDATE_LOCK_KEY);
     }
-  }
-
-  private async bufferDelete(data: { id: number | string }) {
-    if (!data.id) {
-      throw new Error('message id is required for deletes');
-    }
-
-    await this.redis.sadd(this.DELETE_BUFFER_KEY, data.id.toString());
-
-    const count = await this.redis.scard(this.DELETE_BUFFER_KEY);
-
-    if (count >= this.BATCH_SIZE) {
-      this.flushDeleteBuffer().catch((err) =>
-        this.logger.error('Async delete flush failed', err),
-      );
-    }
-
-    return { success: true, buffered: true, operation: 'delete' };
   }
 
   private async flushDeleteBuffer() {
@@ -229,8 +331,11 @@ export class MessageProcessor
     );
 
     if (!lockAcquired) {
+      this.logger.debug('Delete flush already in progress, skipping');
       return;
     }
+
+    const startTime = Date.now();
 
     try {
       const result = await this.redis
@@ -240,37 +345,30 @@ export class MessageProcessor
         .exec();
 
       const ids = result?.[0]?.[1] as string[];
-
+      
       if (!ids || ids.length === 0) {
         return;
       }
 
+      this.logger.log(`Flushing ${ids.length} delete operations`);
+
+      if (ids.length > this.BATCH_SIZE * 2) {
+        await this.extendLock(this.DELETE_LOCK_KEY, this.LOCK_TTL);
+      }
+
       try {
         await this.messageRepository.deleteBatch(ids);
+        this.logger.log(`Successfully flushed ${ids.length} delete operations in ${Date.now() - startTime}ms`);
       } catch (error) {
+        this.logger.error('Delete batch operation failed, moving to DLQ', error);
         await this.moveToDLQ('delete', ids, error);
       }
+    } catch (error) {
+      this.logger.error('Delete flush operation failed', error);
+      throw error;
     } finally {
       await this.redis.del(this.DELETE_LOCK_KEY);
     }
-  }
-
-  private async bufferOneToOneSeen(data: { id: number | string }) {
-    if (!data.id) {
-      throw new Error('message id is required for seen');
-    }
-
-    await this.redis.sadd(this.USER_SEEN_BUFFER_KEY, data.id.toString());
-
-    const count = await this.redis.scard(this.USER_SEEN_BUFFER_KEY);
-
-    if (count >= this.BATCH_SIZE) {
-      this.flushUserMessageSeen().catch((err) =>
-        this.logger.error('Async seen flush failed', err),
-      );
-    }
-
-    return { success: true, buffered: true, operation: 'one-to-one-seen' };
   }
 
   private async flushUserMessageSeen() {
@@ -283,8 +381,11 @@ export class MessageProcessor
     );
 
     if (!lockAcquired) {
+      this.logger.debug('User seen flush already in progress, skipping');
       return;
     }
+
+    const startTime = Date.now();
 
     try {
       const result = await this.redis
@@ -294,55 +395,89 @@ export class MessageProcessor
         .exec();
 
       const ids = result?.[0]?.[1] as string[];
-
+      
       if (!ids || ids.length === 0) {
         return;
       }
 
+      this.logger.log(`Flushing ${ids.length} user seen operations`);
+
+      if (ids.length > this.BATCH_SIZE * 2) {
+        await this.extendLock(this.USER_SEEN_LOCK_KEY, this.LOCK_TTL);
+      }
+
       try {
         await this.messageRepository.oneToOneChatMessageSeenBatch(ids);
+        this.logger.log(`Successfully flushed ${ids.length} user seen operations in ${Date.now() - startTime}ms`);
       } catch (error) {
+        this.logger.error('User seen batch operation failed, moving to DLQ', error);
         await this.moveToDLQ('one-to-one-seen', ids, error);
       }
+    } catch (error) {
+      this.logger.error('User seen flush operation failed', error);
+      throw error;
     } finally {
       await this.redis.del(this.USER_SEEN_LOCK_KEY);
     }
   }
 
+  // ADDED: Lock extension helper
+  private async extendLock(lockKey: string, ttl: number): Promise<void> {
+    try {
+      await this.redis.pexpire(lockKey, ttl);
+      this.logger.debug(`Extended lock ${lockKey} by ${ttl}ms`);
+    } catch (error) {
+      this.logger.warn(`Failed to extend lock ${lockKey}`, error);
+    }
+  }
+
   private async moveToDLQ(
-    operation:
-      | 'create'
-      | 'update'
-      | 'delete'
-      | 'one-to-one-seen'
-      | 'group-seen',
+    operation: 'create' | 'update' | 'delete' | 'one-to-one-seen' | 'group-seen',
     data: any[],
     error: any,
   ) {
-    const dlqKey = `dlq:message:${operation}`;
-
-    const entry = {
-      operation,
-      failedAt: new Date().toISOString(),
-      error: error?.message || 'Unknown error',
-      stack: error?.stack,
-      dataCount: data.length,
-      data,
-    };
-
-    await this.redis.lpush(dlqKey, JSON.stringify(entry));
+    try {
+      const dlqKey = `dlq:message:${operation}`;
+      const entry = {
+        operation,
+        failedAt: new Date().toISOString(),
+        error: error?.message || 'Unknown error',
+        stack: error?.stack,
+        dataCount: data.length,
+        data,
+      };
+      
+      await this.redis.lpush(dlqKey, JSON.stringify(entry));
+      
+      // Keep only last 1000 DLQ entries per operation to prevent memory issues
+      await this.redis.ltrim(dlqKey, 0, 999);
+      
+      this.logger.warn(`Moved ${data.length} items to DLQ: ${dlqKey}`);
+    } catch (dlqError) {
+      this.logger.error('Failed to move items to DLQ', dlqError);
+    }
   }
 
   async onModuleDestroy() {
+    this.isShuttingDown = true;
+    
     if (this.flushInterval) {
       clearInterval(this.flushInterval);
+      this.logger.log('Stopped periodic flush interval');
     }
 
-    await Promise.all([
-      this.flushCreateBuffer(),
-      this.flushUpdateBuffer(),
-      this.flushDeleteBuffer(),
-      this.flushUserMessageSeen(),
-    ]);
+    this.logger.log('Flushing all buffers before shutdown...');
+    
+    try {
+      await Promise.all([
+        this.flushCreateBuffer(),
+        this.flushUpdateBuffer(),
+        this.flushDeleteBuffer(),
+        this.flushUserMessageSeen(),
+      ]);
+      this.logger.log('All buffers flushed successfully');
+    } catch (error) {
+      this.logger.error('Error during final flush', error);
+    }
   }
 }

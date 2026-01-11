@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, BadRequestException } from '@nestjs/common';
 import { IMessageRepositoryToken } from '../repositories/message.repository.interface';
 import { MessageService } from '../services/message.service';
 import { CreateMessageDto } from '../dto/create-message.dto';
@@ -8,6 +8,7 @@ import { ConversationService } from 'src/modules/conversations/services/conversa
 import { ConversationType } from 'src/modules/conversations/dto/conversations.enum';
 import { UserService } from 'src/modules/users/services/user.service';
 import { CreateUserDto } from 'src/modules/users/dto/create-user.dto';
+import { profanity } from '@2toad/profanity';
 
 @Injectable()
 export class CreateMessageUseCase {
@@ -20,6 +21,11 @@ export class CreateMessageUseCase {
   ) {}
 
   async execute(request: CreateMessageDto) {
+    if(request.message && request.message.trim().length > 0) {      
+      if (profanity.exists(request.message)) {
+        throw new BadRequestException('Profanity not allowed');
+      }
+    }
     let conversation_id: string | null = uuidv4();
     let message_id: string | null = uuidv4();
     const existingConversation =

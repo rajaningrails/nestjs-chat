@@ -3,6 +3,7 @@ import {
   Injectable,
   Inject,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { IMessageRepositoryToken } from '../repositories/message.repository.interface';
 import { MessageService } from '../services/message.service';
@@ -10,6 +11,7 @@ import { ConversationService } from 'src/modules/conversations/services/conversa
 import { UserRepository } from 'src/modules/users/repositories/user.repository';
 import { MessageDto } from '../dto/message.dto';
 import { ConversationRepository } from 'src/modules/conversations/repositories/conversation.repository';
+import { profanity } from '@2toad/profanity';
 
 @Injectable()
 export class SendMessageUseCase {
@@ -22,6 +24,11 @@ export class SendMessageUseCase {
   ) {}
 
   async execute(request: MessageDto) {
+    if(request.message && request.message.trim().length > 0) {      
+      if (profanity.exists(request.message)) {
+        throw new BadRequestException('Profanity not allowed');
+      }
+    }
     const existingConversation = await this.conversationRepository.findById(
       request.conversation_id,
     );

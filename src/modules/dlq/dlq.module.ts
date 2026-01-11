@@ -7,6 +7,10 @@ import { MessageRepository } from '../messages/repositories/message.repository';
 import { UserRepository } from '../users/repositories/user.repository';
 import { ConversationRepository } from '../conversations/repositories/conversation.repository';
 import { GroupRepository } from '../group/repositories/group.repository';
+import { UsersModule } from '../users/users.module';
+import { ConversationsModule } from '../conversations/conversation.module';
+import { MessageModule } from '../messages/message.module';
+import { GroupModule } from '../group/group.module';
 
 @Module({
   imports: [
@@ -15,15 +19,13 @@ import { GroupRepository } from '../group/repositories/group.repository';
     BullModule.registerQueue({
       name: 'user-queue',
     }),
+    UsersModule,
+    ConversationsModule,
+    MessageModule,
+    GroupModule,
   ],
   controllers: [DLQController],
-  providers: [
-    DLQRecoveryService,
-    MessageRepository,
-    UserRepository,
-    ConversationRepository,
-    GroupRepository,
-  ],
+  providers: [DLQRecoveryService],
   exports: [DLQRecoveryService],
 })
 export class DLQModule {}

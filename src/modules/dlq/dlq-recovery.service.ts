@@ -54,7 +54,7 @@ export class DLQRecoveryService implements OnModuleInit {
     },
     message: {
       repository: 'MessageRepository',
-      operations: ['create', 'update', 'delete', 'one-to-one-seen', 'group-seen'],
+      operations: ['create', 'update', 'delete', 'one-to-one-seen'],
       retryStrategy: {
         maxRetries: 3,
         retryDelay: 30000,
@@ -71,21 +71,39 @@ export class DLQRecoveryService implements OnModuleInit {
       },
     },
     'group-message-seen': {
-      repository: 'GroupRepository',
-      operations: ['create'],
+      repository: 'GroupRepository', 
+      operations: ['create'], 
       retryStrategy: {
         maxRetries: 3,
         retryDelay: 30000,
         backoffMultiplier: 2,
       },
     },
-    'member': {
-      repository: 'GroupRepository',
-      operations: ['create','update'],
+    member: {
+      repository: 'GroupRepository', // Uses GroupRepository with upsertMemberBatch method
+      operations: ['create', 'update'],
       retryStrategy: {
         maxRetries: 3,
         retryDelay: 30000,
         backoffMultiplier: 2,
+      },
+      customRetryLogic: async (repo: any, operation: string, data: any[]) => {
+        if (operation === 'update' && data.length > 0) {
+          const batch = data;
+          const groupId = batch[0]?.group_id;
+          
+          if (groupId && batch.every(m => m.user_id)) {
+            try {
+              await repo.removeMembers(groupId);
+              await repo.upsertMemberBatch(batch);
+              return true;
+            } catch (error) {
+              this.logger.error('Custom member update logic failed', error);
+              return false;
+            }
+          }
+        }
+        return false;
       },
     },
   };
@@ -110,7 +128,11 @@ export class DLQRecoveryService implements OnModuleInit {
     for (const [entity, config] of Object.entries(this.ENTITY_CONFIGS)) {
       for (const operation of config.operations) {
         const dlqKey = `dlq:${entity}:${operation}`;
-        await this.processDLQ(entity, operation, dlqKey, config);
+        try {
+          await this.processDLQ(entity, operation, dlqKey, config);
+        } catch (error) {
+          this.logger.error(`Error processing DLQ ${dlqKey}`, error);
+        }
       }
     }
   }
@@ -133,7 +155,12 @@ export class DLQRecoveryService implements OnModuleInit {
       const entryJson = await this.redis.rpop(dlqKey);
       if (!entryJson) continue;
 
-      await this.processDLQEntry(entity, operation, dlqKey, entryJson, config);
+      try {
+        await this.processDLQEntry(entity, operation, dlqKey, entryJson, config);
+      } catch (error) {
+        this.logger.error(`Error processing DLQ entry from ${dlqKey}`, error);
+        await this.redis.lpush(dlqKey, entryJson);
+      }
     }
   }
 
@@ -225,6 +252,7 @@ export class DLQRecoveryService implements OnModuleInit {
       return false;
     }
 
+    // Try custom retry logic first if available
     if (config.customRetryLogic) {
       try {
         const customSuccess = await config.customRetryLogic(repository, operation, data);
@@ -239,10 +267,10 @@ export class DLQRecoveryService implements OnModuleInit {
     try {
       switch (operation) {
         case 'create':
-          await this.handleCreate(repository, data);
+          await this.handleCreate(repository, data, entity);
           break;
         case 'update':
-          await this.handleUpdate(repository, data);
+          await this.handleUpdate(repository, data, entity);
           break;
         case 'delete':
           await this.handleDelete(repository, data);
@@ -260,13 +288,49 @@ export class DLQRecoveryService implements OnModuleInit {
     }
   }
 
-  private async handleCreate(repository: any, data: any[]) {
-    await repository.upsertBatch(data);
-  }
+  private async handleCreate(repository: any, data: any[], entity: string) {
+    if (entity === 'group-message-seen') {
+      if (typeof repository.groupMessageSeenBatch === 'function') {
+        await repository.groupMessageSeenBatch(data);
+      } else {
+        throw new Error('groupMessageSeenBatch method not available');
+      }
+      return;
+    }
 
-  private async handleUpdate(repository: any, data: any[]) {
+    if (entity === 'member') {
+      if (typeof repository.upsertMemberBatch === 'function') {
+        await repository.upsertMemberBatch(data);
+      } else {
+        throw new Error('upsertMemberBatch method not available');
+      }
+      return;
+    }
+
     if (typeof repository.upsertBatch === 'function') {
       await repository.upsertBatch(data);
+    } else if (typeof repository.createBatch === 'function') {
+      await repository.createBatch(data);
+    } else {
+      throw new Error('No batch create method available');
+    }
+  }
+
+  private async handleUpdate(repository: any, data: any[], entity: string) {
+    if (entity === 'member') {
+      if (typeof repository.upsertMemberBatch === 'function') {
+        await repository.upsertMemberBatch(data);
+      } else {
+        throw new Error('upsertMemberBatch method not available');
+      }
+      return;
+    }
+
+    if (typeof repository.upsertBatch === 'function') {
+      await repository.upsertBatch(data);
+    } else if (typeof repository.updateBatch === 'function') {
+      await repository.updateBatch(data);
+    } else {
       throw new Error('No batch update method available');
     }
   }
@@ -342,16 +406,41 @@ export class DLQRecoveryService implements OnModuleInit {
 
     switch (operation) {
       case 'create':
-        await repository.create(record);
+        if (typeof repository.create === 'function') {
+          await repository.create(record);
+        } else if (typeof repository.upsert === 'function') {
+          await repository.upsert(record);
+        } else {
+          throw new Error('No individual create method available');
+        }
         break;
       case 'update':
-        await repository.update(record[idField], record);
+        if (typeof repository.update === 'function') {
+          await repository.update(record[idField], record);
+        } else if (typeof repository.upsert === 'function') {
+          await repository.upsert(record);
+        } else {
+          throw new Error('No individual update method available');
+        }
         break;
       case 'delete':
-        if (typeof record === 'string' || typeof record === 'number') {
-          await repository.delete(record);
+        if (typeof repository.delete === 'function') {
+          if (typeof record === 'string' || typeof record === 'number') {
+            await repository.delete(record);
+          } else {
+            await repository.delete(record[idField]);
+          }
         } else {
-          await repository.delete(record[idField]);
+          throw new Error('No individual delete method available');
+        }
+        break;
+      case 'one-to-one-seen':
+        if (typeof repository.markAsSeen === 'function') {
+          await repository.markAsSeen(record);
+        } else if (typeof repository.oneToOneChatMessageSeen === 'function') {
+          await repository.oneToOneChatMessageSeen(record);
+        } else {
+          throw new Error('No individual seen method available');
         }
         break;
       default:
@@ -366,6 +455,7 @@ export class DLQRecoveryService implements OnModuleInit {
       message: 'id',
       group: 'group_id',
       'group-message-seen': 'id',
+      member: 'id',
     };
     return idFields[entity] || 'id';
   }
@@ -386,6 +476,7 @@ export class DLQRecoveryService implements OnModuleInit {
 
     await this.redis.lpush(this.PERMANENT_FAILURE_KEY, JSON.stringify(failure));
     
+    // Keep only last 10000 permanent failures
     await this.redis.ltrim(this.PERMANENT_FAILURE_KEY, 0, 9999);
 
     this.logger.error(
@@ -407,6 +498,7 @@ export class DLQRecoveryService implements OnModuleInit {
       );
     }
 
+    // Keep only last 10000 permanent failures
     await this.redis.ltrim(this.PERMANENT_FAILURE_KEY, 0, 9999);
 
     this.logger.error(`Stored ${failures.length} permanent failures`);
@@ -435,7 +527,13 @@ export class DLQRecoveryService implements OnModuleInit {
       const entryJson = await this.redis.rpop(dlqKey);
       if (!entryJson) break;
       
-      await this.processDLQEntry(entity, operation, dlqKey, entryJson, config);
+      try {
+        await this.processDLQEntry(entity, operation, dlqKey, entryJson, config);
+      } catch (error) {
+        this.logger.error(`Error during manual retry of entry from ${dlqKey}`, error);
+        // Push back to avoid losing data
+        await this.redis.lpush(dlqKey, entryJson);
+      }
     }
 
     return processCount;
@@ -480,7 +578,14 @@ export class DLQRecoveryService implements OnModuleInit {
       offset + limit - 1,
     );
 
-    return failures.map((f) => JSON.parse(f));
+    return failures.map((f) => {
+      try {
+        return JSON.parse(f);
+      } catch (error) {
+        this.logger.error('Failed to parse permanent failure', error);
+        return null;
+      }
+    }).filter(Boolean);
   }
 
   async clearPermanentFailures(limit?: number) {

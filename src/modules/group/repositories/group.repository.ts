@@ -44,11 +44,9 @@ export class GroupRepository implements IGroupRepository {
       .execute();
   }
 
-  async removeMembers(groupId: string, userIds: number[]): Promise<void> {
-    if (!userIds.length) return;
+  async removeMembers(groupId: string): Promise<void> {
     await this.groupMemberRepo.delete({
       group_id: groupId,
-      user_id: Not(In(userIds)),
     });
   }
 

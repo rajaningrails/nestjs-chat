@@ -40,14 +40,14 @@ export class GroupMemberProcessor
 
   constructor(
     @InjectQueue(GroupMemberProcessorConfig.queue_name)
-    private userQueue: Queue,
+    private memberQueue: Queue,
     private readonly groupRepository: GroupRepository,
   ) {
     super();
   }
 
   async onModuleInit() {
-    this.redis = (await this.userQueue.client) as Redis;
+    this.redis = (await this.memberQueue.client) as Redis;
 
     this.flushInterval = setInterval(async () => {
       try {
@@ -99,7 +99,7 @@ export class GroupMemberProcessor
 
     await this.redis.hset(
       this.UPDATE_BUFFER_KEY,
-      data.user_id.toString(),
+      data.id.toString(),
       JSON.stringify(data),
     );
 
@@ -142,7 +142,6 @@ export class GroupMemberProcessor
 
       const batch = rawData.map((item) => JSON.parse(item));
       try {
-        await this. groupRepository.removeMembers(batch[0].group_id, batch.map((m) => m.user_id));
         await this.groupRepository.upsertMemberBatch(batch);
       } catch (error) {
         await this.moveToDLQ('create', batch, error);
@@ -181,7 +180,7 @@ export class GroupMemberProcessor
       const batch = Object.values(hashData).map((item) => JSON.parse(item));
 
       try {
-        await this. groupRepository.removeMembers(batch[0].group_id, batch.map((m) => m.user_id));
+        await this.groupRepository.removeMembers(batch[0].group_id);
         await this.groupRepository.upsertMemberBatch(batch);
       } catch (error) {
         await this.moveToDLQ('update', batch, error);
@@ -196,7 +195,7 @@ export class GroupMemberProcessor
     data: any[],
     error: any,
   ) {
-    const dlqKey = `dlq:user:${operation}`;
+    const dlqKey = `dlq:member:${operation}`;
 
     const entry = {
       operation,

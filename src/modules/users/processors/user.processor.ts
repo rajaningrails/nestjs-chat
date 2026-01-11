@@ -46,7 +46,7 @@ export class UserProcessor
   }
 
   async onModuleInit() {
-    this.redis = await this.userQueue.client as Redis;
+    this.redis = (await this.userQueue.client) as Redis;
 
     this.flushInterval = setInterval(async () => {
       try {
@@ -141,7 +141,7 @@ export class UserProcessor
 
       const batch = rawData.map((item) => JSON.parse(item));
       try {
-        await this.userRepository.createBatch(batch);
+        await this.userRepository.upsertBatch(batch);
       } catch (error) {
         await this.moveToDLQ('create', batch, error);
       }
@@ -179,7 +179,7 @@ export class UserProcessor
       const batch = Object.values(hashData).map((item) => JSON.parse(item));
 
       try {
-        await this.userRepository.updateBatch(batch);
+        await this.userRepository.upsertBatch(batch);
       } catch (error) {
         await this.moveToDLQ('update', batch, error);
       }

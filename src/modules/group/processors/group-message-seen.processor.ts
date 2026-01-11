@@ -38,14 +38,14 @@ export class GroupMessageSeenProcessor
 
   constructor(
     @InjectQueue(GroupMemberMessageSeenProcessorConfig.queue_name)
-    private userQueue: Queue,
+    private messageSeenQueue: Queue,
     private readonly groupRepository: GroupRepository,
   ) {
     super();
   }
 
   async onModuleInit() {
-    this.redis = (await this.userQueue.client) as Redis;
+    this.redis = (await this.messageSeenQueue.client) as Redis;
 
     this.flushInterval = setInterval(async () => {
       try {

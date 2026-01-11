@@ -22,9 +22,10 @@ interface RetryStrategy {
 }
 
 interface EntityConfig {
-  repository: string; // Repository class name
-  operations: string[]; // Supported operations
+  repository: string;
+  operations: string[];
   retryStrategy: RetryStrategy;
+  customRetryLogic?: (repo: any, operation: string, data: any[]) => Promise<boolean>;
 }
 
 @Injectable()
@@ -38,28 +39,55 @@ export class DLQRecoveryService implements OnModuleInit {
       operations: ['create', 'update'],
       retryStrategy: {
         maxRetries: 5,
-        retryDelay: 60000, // 1 minute
+        retryDelay: 60000,
         backoffMultiplier: 2,
       },
     },
-    // conversation: {
-    //   repository: 'ConversationRepository',
-    //   operations: ['create', 'update'],
-    //   retryStrategy: {
-    //     maxRetries: 5,
-    //     retryDelay: 60000,
-    //     backoffMultiplier: 2,
-    //   },
-    // },
-    // message: {
-    //   repository: 'MessageRepository',
-    //   operations: ['create', 'update', 'delete'],
-    //   retryStrategy: {
-    //     maxRetries: 3,
-    //     retryDelay: 30000, // 30 seconds (messages are more time-sensitive)
-    //     backoffMultiplier: 2,
-    //   },
-    // },
+    conversation: {
+      repository: 'ConversationRepository',
+      operations: ['create', 'update', 'delete'],
+      retryStrategy: {
+        maxRetries: 5,
+        retryDelay: 60000,
+        backoffMultiplier: 2,
+      },
+    },
+    message: {
+      repository: 'MessageRepository',
+      operations: ['create', 'update', 'delete', 'one-to-one-seen', 'group-seen'],
+      retryStrategy: {
+        maxRetries: 3,
+        retryDelay: 30000,
+        backoffMultiplier: 2,
+      },
+    },
+    group: {
+      repository: 'GroupRepository',
+      operations: ['create', 'update', 'delete'],
+      retryStrategy: {
+        maxRetries: 4,
+        retryDelay: 45000,
+        backoffMultiplier: 2,
+      },
+    },
+    'group-message-seen': {
+      repository: 'GroupRepository',
+      operations: ['create'],
+      retryStrategy: {
+        maxRetries: 3,
+        retryDelay: 30000,
+        backoffMultiplier: 2,
+      },
+    },
+    'member': {
+      repository: 'GroupRepository',
+      operations: ['create','update'],
+      retryStrategy: {
+        maxRetries: 3,
+        retryDelay: 30000,
+        backoffMultiplier: 2,
+      },
+    },
   };
 
   private readonly PERMANENT_FAILURE_KEY = 'dlq:permanent_failures';
@@ -72,15 +100,12 @@ export class DLQRecoveryService implements OnModuleInit {
 
   async onModuleInit() {
     this.redis = (await this.userQueue.client) as Redis;
-    this.logger.log('DLQRecoveryService initialized');
+    this.logger.log('DLQRecoveryService initialized with all processors');
   }
 
-  /**
-   * Main recovery cron - runs every 5 minutes
-   */
   @Cron(CronExpression.EVERY_5_MINUTES)
   async processAllDLQs() {
-    this.logger.log('Starting DLQ recovery process...');
+    this.logger.log('Starting DLQ recovery process for all entities...');
 
     for (const [entity, config] of Object.entries(this.ENTITY_CONFIGS)) {
       for (const operation of config.operations) {
@@ -90,9 +115,6 @@ export class DLQRecoveryService implements OnModuleInit {
     }
   }
 
-  /**
-   * Process a specific DLQ
-   */
   private async processDLQ(
     entity: string,
     operation: string,
@@ -105,8 +127,7 @@ export class DLQRecoveryService implements OnModuleInit {
 
     this.logger.log(`Processing ${count} entries from ${dlqKey}`);
 
-    // Process entries one at a time to avoid system overload
-    const batchSize = Math.min(10, count); // Process max 10 at a time
+    const batchSize = Math.min(10, count);
 
     for (let i = 0; i < batchSize; i++) {
       const entryJson = await this.redis.rpop(dlqKey);
@@ -116,9 +137,6 @@ export class DLQRecoveryService implements OnModuleInit {
     }
   }
 
-  /**
-   * Process a single DLQ entry
-   */
   private async processDLQEntry(
     entity: string,
     operation: string,
@@ -130,7 +148,6 @@ export class DLQRecoveryService implements OnModuleInit {
     const retryCount = entry.retryCount || 0;
     const strategy = config.retryStrategy;
 
-    // Check if max retries exceeded
     if (retryCount >= strategy.maxRetries) {
       this.logger.warn(
         `Max retries (${strategy.maxRetries}) exceeded for ${entity}:${operation}`,
@@ -144,18 +161,15 @@ export class DLQRecoveryService implements OnModuleInit {
       return;
     }
 
-    // Calculate retry delay with exponential backoff
     const delay =
       strategy.retryDelay * Math.pow(strategy.backoffMultiplier, retryCount);
     const timeSinceFailure = Date.now() - new Date(entry.failedAt).getTime();
 
     if (timeSinceFailure < delay) {
-      // Not ready to retry yet, push back to queue
       await this.redis.lpush(dlqKey, entryJson);
       return;
     }
 
-    // Attempt retry
     this.logger.log(
       `Retrying ${entity}:${operation} (attempt ${retryCount + 1}/${strategy.maxRetries})`,
     );
@@ -172,7 +186,6 @@ export class DLQRecoveryService implements OnModuleInit {
         `Successfully recovered ${entry.dataCount} ${entity} records`,
       );
     } else {
-      // Increment retry count and push back to DLQ
       entry.retryCount = retryCount + 1;
       entry.failedAt = new Date().toISOString();
       await this.redis.lpush(dlqKey, JSON.stringify(entry));
@@ -182,9 +195,6 @@ export class DLQRecoveryService implements OnModuleInit {
     }
   }
 
-  /**
-   * Get repository instance (with caching)
-   */
   private async getRepository(repositoryName: string): Promise<any> {
     if (this.repositoryCache.has(repositoryName)) {
       return this.repositoryCache.get(repositoryName);
@@ -202,9 +212,6 @@ export class DLQRecoveryService implements OnModuleInit {
     }
   }
 
-  /**
-   * Retry a batch operation
-   */
   private async retryBatch(
     entity: string,
     operation: string,
@@ -218,46 +225,68 @@ export class DLQRecoveryService implements OnModuleInit {
       return false;
     }
 
+    if (config.customRetryLogic) {
+      try {
+        const customSuccess = await config.customRetryLogic(repository, operation, data);
+        if (customSuccess) {
+          return true;
+        }
+      } catch (error) {
+        this.logger.warn('Custom retry logic failed, falling back to standard', error);
+      }
+    }
+
     try {
-      // Try batch operation first
       switch (operation) {
         case 'create':
-          if (typeof repository.createBatch === 'function') {
-            await repository.createBatch(data);
-          } else {
-            throw new Error('createBatch method not found');
-          }
+          await this.handleCreate(repository, data);
           break;
         case 'update':
-          if (typeof repository.updateBatch === 'function') {
-            await repository.updateBatch(data);
-          } else {
-            throw new Error('updateBatch method not found');
-          }
+          await this.handleUpdate(repository, data);
           break;
         case 'delete':
-          if (typeof repository.deleteBatch === 'function') {
-            await repository.deleteBatch(data);
-          } else {
-            throw new Error('deleteBatch method not found');
-          }
+          await this.handleDelete(repository, data);
+          break;
+        case 'one-to-one-seen':
+          await this.handleOneToOneSeen(repository, data);
           break;
         default:
           throw new Error(`Unknown operation: ${operation}`);
       }
       return true;
     } catch (error) {
-      this.logger.warn(
-        `Batch operation failed, trying individual fallback`,
-        error,
-      );
+      this.logger.warn(`Batch operation failed, trying individual fallback`, error);
       return await this.individualFallback(repository, operation, data, entity);
     }
   }
 
-  /**
-   * Individual record fallback when batch fails
-   */
+  private async handleCreate(repository: any, data: any[]) {
+    await repository.upsertBatch(data);
+  }
+
+  private async handleUpdate(repository: any, data: any[]) {
+    if (typeof repository.upsertBatch === 'function') {
+      await repository.upsertBatch(data);
+      throw new Error('No batch update method available');
+    }
+  }
+
+  private async handleDelete(repository: any, data: any[]) {
+    if (typeof repository.deleteBatch === 'function') {
+      await repository.deleteBatch(data);
+    } else {
+      throw new Error('No batch delete method available');
+    }
+  }
+
+  private async handleOneToOneSeen(repository: any, data: any[]) {
+    if (typeof repository.oneToOneChatMessageSeenBatch === 'function') {
+      await repository.oneToOneChatMessageSeenBatch(data);
+    } else {
+      throw new Error('No one-to-one seen batch method available');
+    }
+  }
+
   private async individualFallback(
     repository: any,
     operation: string,
@@ -273,26 +302,13 @@ export class DLQRecoveryService implements OnModuleInit {
 
     for (const record of data) {
       try {
-        switch (operation) {
-          case 'create':
-            await repository.create(record);
-            break;
-          case 'update':
-            const idField = this.getIdField(entity);
-            await repository.update(record[idField], record);
-            break;
-          case 'delete':
-            const deleteIdField = this.getIdField(entity);
-            await repository.delete(record[deleteIdField]);
-            break;
-        }
+        await this.processIndividualRecord(repository, operation, record, entity);
         successCount++;
-        // Small delay to avoid overwhelming DB
         await this.sleep(50);
       } catch (error) {
         const idField = this.getIdField(entity);
         this.logger.error(
-          `Individual record failed: ${entity} ${record[idField]}`,
+          `Individual record failed: ${entity} ${record[idField] || record}`,
           error,
         );
         failedRecords.push({
@@ -316,21 +332,44 @@ export class DLQRecoveryService implements OnModuleInit {
     return successRate >= 0.8;
   }
 
-  /**
-   * Get ID field name for entity
-   */
+  private async processIndividualRecord(
+    repository: any,
+    operation: string,
+    record: any,
+    entity: string,
+  ) {
+    const idField = this.getIdField(entity);
+
+    switch (operation) {
+      case 'create':
+        await repository.create(record);
+        break;
+      case 'update':
+        await repository.update(record[idField], record);
+        break;
+      case 'delete':
+        if (typeof record === 'string' || typeof record === 'number') {
+          await repository.delete(record);
+        } else {
+          await repository.delete(record[idField]);
+        }
+        break;
+      default:
+        throw new Error(`Cannot process individual record for operation: ${operation}`);
+    }
+  }
+
   private getIdField(entity: string): string {
     const idFields: Record<string, string> = {
       user: 'user_id',
       conversation: 'conversation_id',
-      message: 'message_id',
+      message: 'id',
+      group: 'group_id',
+      'group-message-seen': 'id',
     };
     return idFields[entity] || 'id';
   }
 
-  /**
-   * Move entry to permanent failure storage
-   */
   private async moveToPermanentFailure(
     entry: DLQEntry,
     entity: string,
@@ -346,15 +385,14 @@ export class DLQRecoveryService implements OnModuleInit {
     };
 
     await this.redis.lpush(this.PERMANENT_FAILURE_KEY, JSON.stringify(failure));
+    
+    await this.redis.ltrim(this.PERMANENT_FAILURE_KEY, 0, 9999);
 
     this.logger.error(
       `PERMANENT FAILURE: ${entity}:${operation} - ${reason} - ${entry.dataCount} records`,
     );
   }
 
-  /**
-   * Store individual permanent failures
-   */
   private async storePermanentFailures(failures: any[]) {
     const timestamp = new Date().toISOString();
 
@@ -369,12 +407,11 @@ export class DLQRecoveryService implements OnModuleInit {
       );
     }
 
+    await this.redis.ltrim(this.PERMANENT_FAILURE_KEY, 0, 9999);
+
     this.logger.error(`Stored ${failures.length} permanent failures`);
   }
 
-  /**
-   * Manual retry for specific entity/operation
-   */
   async manualRetry(entity: string, operation: string): Promise<number> {
     const config = this.ENTITY_CONFIGS[entity];
 
@@ -391,20 +428,19 @@ export class DLQRecoveryService implements OnModuleInit {
 
     this.logger.log(`Manual retry triggered for ${dlqKey}, ${count} entries`);
 
-    // Process all entries
     const maxBatch = 50;
     const processCount = Math.min(count, maxBatch);
 
     for (let i = 0; i < processCount; i++) {
-      await this.processDLQ(entity, operation, dlqKey, config);
+      const entryJson = await this.redis.rpop(dlqKey);
+      if (!entryJson) break;
+      
+      await this.processDLQEntry(entity, operation, dlqKey, entryJson, config);
     }
 
     return processCount;
   }
 
-  /**
-   * Get comprehensive DLQ statistics
-   */
   async getDLQStats() {
     const stats: Record<string, any> = {};
 
@@ -420,7 +456,6 @@ export class DLQRecoveryService implements OnModuleInit {
     const permanentFailures = await this.redis.llen(this.PERMANENT_FAILURE_KEY);
     stats.permanentFailures = permanentFailures;
 
-    // Get total across all DLQs
     const totalDLQ = Object.values(stats)
       .filter((v) => typeof v === 'object')
       .reduce((sum, entity) => {
@@ -438,9 +473,6 @@ export class DLQRecoveryService implements OnModuleInit {
     return stats;
   }
 
-  /**
-   * Get permanent failures with pagination
-   */
   async getPermanentFailures(limit: number = 100, offset: number = 0) {
     const failures = await this.redis.lrange(
       this.PERMANENT_FAILURE_KEY,
@@ -451,9 +483,6 @@ export class DLQRecoveryService implements OnModuleInit {
     return failures.map((f) => JSON.parse(f));
   }
 
-  /**
-   * Clear permanent failures
-   */
   async clearPermanentFailures(limit?: number) {
     if (limit) {
       const items = await this.redis.lrange(
@@ -470,11 +499,9 @@ export class DLQRecoveryService implements OnModuleInit {
     }
   }
 
-  /**
-   * Add new entity configuration at runtime
-   */
   addEntityConfig(entity: string, config: EntityConfig) {
     this.ENTITY_CONFIGS[entity] = config;
+    this.logger.log(`Added entity configuration: ${entity}`);
   }
 
   private sleep(ms: number): Promise<void> {

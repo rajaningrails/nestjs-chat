@@ -6,7 +6,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { Job, Queue } from 'bullmq';
-import { GroupMemberProcessorConfig, GroupProcessorConfig } from 'src/infrastructure/bullmq/size-queue.config';
+import { GroupProcessorConfig } from 'src/infrastructure/bullmq/size-queue.config';
 import { Redis } from 'ioredis';
 import { GroupRepository } from '../repositories/group.repository';
 import { CreateChatGroupDto, UpdateGroupDto } from '../dto/chat-group.dto';
@@ -32,14 +32,13 @@ export class GroupProcessor
 
   private readonly BATCH_SIZE = GroupProcessorConfig.batch_size || 100;
   private readonly FLUSH_INTERVAL = GroupProcessorConfig.batch_timeout || 5000;
-  private readonly LOCK_TTL = 30000; // 30 seconds
+  private readonly LOCK_TTL = 30000;
 
   private flushInterval: NodeJS.Timeout | null = null;
   private redis: Redis;
 
   constructor(
     @InjectQueue(GroupProcessorConfig.queue_name) private groupQueue: Queue,
-    @InjectQueue(GroupMemberProcessorConfig.queue_name) private groupMemberQueue: Queue,
     private readonly groupRepository: GroupRepository,
   ) {
     super();
@@ -142,11 +141,6 @@ export class GroupProcessor
       const batch = rawData.map((item) => JSON.parse(item));
       try {
         await this.groupRepository.upsertBatch(batch);
-        const memberJobs = batch.map((g) => ({
-          name: 'update-members',
-          data: g,
-        }));
-        await this.groupMemberQueue.addBulk(memberJobs);
       } catch (error) {
         await this.moveToDLQ('create', batch, error);
       }
@@ -185,11 +179,6 @@ export class GroupProcessor
 
       try {
         await this.groupRepository.upsertBatch(batch);
-        const memberJobs = batch.map((g) => ({
-          name: 'save-members',
-          data: g,
-        }));
-        await this.groupMemberQueue.addBulk(memberJobs);
       } catch (error) {
         await this.moveToDLQ('update', batch, error);
       }

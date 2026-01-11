@@ -34,22 +34,6 @@ export class UserRepository implements IUserRepository {
     return this.findByUserId(user_id);
   }
 
-  async upsertUser(
-    userData: CreateUserDto,
-    manager?: EntityManager,
-  ): Promise<void> {
-    const repo = manager ? manager.getRepository(User) : this.userRepository;
-    const existing = await repo.findOne({
-      where: {
-        user_id: userData.user_id,
-      },
-    });
-    if (existing) {
-      return;
-    }
-    await repo.upsert(userData, ['user_id', 'school_id']);
-  }
-
   async findByUserIds(userIds: number[]): Promise<User[]> {
     return this.userRepository.find({
       where: {
@@ -63,45 +47,19 @@ export class UserRepository implements IUserRepository {
     await this.userRepository.save(entities);
   }
 
-  async createBatch(users: CreateUserDto[]): Promise<void> {
+  async upsertBatch(users: Partial<User>[]): Promise<void> {
+    if (!users.length) return;
+
     for (let i = 0; i < users.length; i += this.CHUNK_SIZE) {
       const chunk = users.slice(i, i + this.CHUNK_SIZE);
+
       await this.userRepository
         .createQueryBuilder()
         .insert()
         .into(User)
         .values(chunk)
-        .orUpdate(['name', 'image', 'type'], ['user_id'])
+        .orUpdate(['name', 'email', 'image', 'type'], ['user_id'])
         .execute();
     }
-  }
-
-  async updateBatch(users: Partial<User>[]): Promise<void> {
-    if (!users.length) return;
-
-    const fields = ['name', 'email', 'image', 'type'];
-
-    const setObject: any = {};
-
-    for (const field of fields) {
-      const cases = users
-        .filter(u => u[field] !== undefined)
-        .map(u => `WHEN ${u.user_id} THEN ${escapeValue(u[field])}`)
-        .join(' ');
-
-      if (cases.length) {
-        setObject[field] = () =>
-          `CASE user_id ${cases} ELSE ${field} END`;
-      }
-    }
-
-    const ids = users.map(u => u.user_id);
-
-    await this.userRepository
-      .createQueryBuilder()
-      .update(User)
-      .set(setObject)
-      .where('user_id IN (:...ids)', { ids })
-      .execute();
   }
 }

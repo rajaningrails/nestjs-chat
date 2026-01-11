@@ -3,6 +3,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { GroupProcessorConfig } from 'src/infrastructure/bullmq/size-queue.config';
 import { CreateChatGroupDto, UpdateGroupDto } from '../dto/chat-group.dto';
+import { CreateChatGroupMemberDto } from '../dto/chat-group-member.dto';
 @Injectable()
 export class GroupService {
   constructor(
@@ -48,6 +49,18 @@ export class GroupService {
         school_id,
       }),
     );
+  }
+
+  async createGroupMembers(payload: CreateChatGroupMemberDto[]) {
+    const data: CreateChatGroupMemberDto[] = payload;
+    await this.groupQueue.add('save-member', data);
+    return data;
+  }
+
+  async updateGroupMembers(payload: Partial<CreateChatGroupMemberDto>[]) {
+    const data: Partial<CreateChatGroupMemberDto>[] = payload;
+    await this.groupQueue.add('update-member', data);
+    return data;
   }
 
   async updateGroup(payload: UpdateGroupDto) {

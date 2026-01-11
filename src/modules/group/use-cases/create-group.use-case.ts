@@ -12,6 +12,7 @@ import { UserService } from 'src/modules/users/services/user.service';
 import { GroupService } from '../service/group.service';
 import { ConversationService } from 'src/modules/conversations/services/conversation.service';
 import { MessageService } from 'src/modules/messages/services/message.service';
+import { CreateChatGroupMemberDto } from '../dto/chat-group-member.dto';
 
 @Injectable()
 export class CreateGroupUseCase {
@@ -77,6 +78,12 @@ export class CreateGroupUseCase {
     request.id = group_id;
 
     await this.groupService.createGroup(request);
+    const members: CreateChatGroupMemberDto[] = allMembers.map((m) => ({
+      group_id: group_id,
+      id: uuidv4(),
+      user_id: m.id,
+    }));
+    await this.groupService.createGroupMembers(members);
     await this.conversationService.createConversation({
       id: conversation_id,
       school_id: request.school_id,

@@ -81,6 +81,12 @@ export class UpdateGroupUseCase {
       group_type = GroupType.TEACHERS_GROUP;
     }
     await this.groupService.updateGroup(request);
+    const members = allMembers.map((m) => ({
+      group_id: request.group_id,
+      user_id: m.id,
+      id: uuidv4(),
+    }))
+    await this.groupService.updateGroupMembers(members)
     return {
       conversation_id: exists.conversations[0].id,
       group_id: request.group_id,

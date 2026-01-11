@@ -23,7 +23,7 @@ export class ConversationController {
     @Query('school_id', new ParseIntPipe({ optional: true })) school_id = 1,
     @Query('user_id', new ParseIntPipe({ optional: true })) user_id = 1,
     @Query('search') search: string,
-  ): Promise<Conversation[]> {
+  ) {
     return this.conversationRepository.latestConversations(
       limit,
       page,

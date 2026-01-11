@@ -111,9 +111,6 @@ export class MessageGateway
       // Join user's conversation rooms
       await this.joinUserConversations(client, userId);
 
-      // Send any undelivered messages
-      await this.sendUndeliveredMessages(client, userId);
-
       // Setup heartbeat
       this.setupHeartbeat(client, userId);
 
@@ -222,28 +219,6 @@ export class MessageGateway
   }
 
   /**
-   * Send undelivered messages to reconnected user
-   */
-  private async sendUndeliveredMessages(
-    client: AuthenticatedSocket,
-    userId: number
-  ): Promise<void> {
-    try {
-      const undelivered = await this.messageService
-        .getUndeliveredMessages(userId);
-
-      if (undelivered.length > 0) {
-        client.emit('undelivered-messages', undelivered);
-        this.logger.log(
-          `Sent ${undelivered.length} undelivered messages to user ${userId}`
-        );
-      }
-    } catch (error) {
-      this.logger.error('Failed to send undelivered messages:', error);
-    }
-  }
-
-  /**
    * Handle typing indicator
    */
   @SubscribeMessage('typing')
@@ -256,11 +231,11 @@ export class MessageGateway
     if (!userId) return;
 
     try {
-      await this.messageService.emitTypingIndicator(
-        data.conversation_id,
-        userId,
-        data.is_typing
-      );
+      // await this.messageService.emitTypingIndicator(
+      //   data.conversation_id,
+      //   userId,
+      //   data.is_typing
+      // );
     } catch (error) {
       this.logger.error('Failed to handle typing indicator:', error);
     }
@@ -279,7 +254,7 @@ export class MessageGateway
     if (!userId) return;
 
     try {
-      await this.messageService.markMessageAsSeen(data.message_id, userId);
+      // await this.messageService.markMessageAsSeen(data.message_id, userId);
     } catch (error) {
       this.logger.error('Failed to mark message as seen:', error);
       client.emit('error', {

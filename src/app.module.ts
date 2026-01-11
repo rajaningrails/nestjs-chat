@@ -41,7 +41,7 @@ import { DLQModule } from './modules/dlq/dlq.module';
     CommonModule,
     ThrottleModule,
     TasksModule,
-    DLQModule, // dead letter queue recovery module
+    // DLQModule, // dead letter queue recovery module
 
     // Feature modules
     HealthModule,

@@ -85,60 +85,6 @@ export class ConversationService {
     }
   }
 
-  async getUserContacts(userId: number): Promise<UserContact[]> {
-    try {
-      const conversations =
-        await this.conversationRepository.findByUserId(userId);
-
-      const contactIds = new Set<number>();
-
-      for (const conversation of conversations) {
-        if (conversation.type === 'user') {
-          if (conversation.last_message_sender_id !== userId) {
-            contactIds.add(conversation.last_message_sender_id!);
-          }
-          if (
-            conversation.last_message_receiver_id &&
-            conversation.last_message_receiver_id !== userId
-          ) {
-            contactIds.add(conversation.last_message_receiver_id);
-          }
-        } else if (conversation.type === 'group' && conversation.group_id) {
-          const groupMembers = await this.getGroupMembers(
-            conversation.group_id,
-          );
-          groupMembers.forEach((memberId) => {
-            if (memberId !== userId) {
-              contactIds.add(memberId);
-            }
-          });
-        }
-      }
-
-      if (contactIds.size === 0) {
-        return [];
-      }
-
-      const contacts = await this.dataSource.query(
-        `
-                SELECT 
-                id,
-                name,
-                email,
-                avatar
-                FROM users
-                WHERE id = ANY($1)
-                `,
-        [Array.from(contactIds)],
-      );
-
-      return contacts;
-    } catch (error) {
-      this.logger.error(`Failed to get contacts for user ${userId}:`, error);
-      return [];
-    }
-  }
-
   async getGroupMembers(groupId: string): Promise<number[]> {
     try {
       const members = await this.dataSource.query(

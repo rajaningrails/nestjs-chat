@@ -1,19 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import Redis from 'ioredis';
 import { SocketService } from './socket.service';
 import { RedisService } from '../redis.service';
+import { Redis } from 'ioredis';
 
 @Injectable()
 export class TypingService {
   private readonly TYPING_PREFIX = 'typing:';
-  private readonly TYPING_TIMEOUT = 3000; // 3 seconds
+  private readonly TYPING_TIMEOUT = 8000;
 
   constructor(
     private readonly redisService: RedisService,
     private readonly socketService: SocketService,
   ) {}
 
-  private get redis() {
+  private get redis():Redis {
     return this.redisService.getClient();
   }
   
@@ -22,19 +22,19 @@ export class TypingService {
    */
   async startTyping(conversationId: number, userId: number): Promise<void> {
     const key = `${this.TYPING_PREFIX}${conversationId}`;
-    
-    // Add user to typing set
-    await this.redis.sadd(key, userId.toString());
-    await this.redis.expire(key, 10); // Auto-expire after 10 seconds
-
-    // Emit to conversation room
+  
+    await this.redis.multi()
+      .sadd(key, userId.toString())
+      .expire(key, this.TYPING_TIMEOUT)
+      .exec();
+  
     const roomId = `conversation:${conversationId}`;
     await this.socketService.emitToRoom(roomId, 'user-typing', {
       conversation_id: conversationId,
       user_id: userId,
       isTyping: true,
     });
-  }
+  }  
 
   /**
    * Stop typing in a conversation
@@ -42,10 +42,8 @@ export class TypingService {
   async stopTyping(conversationId: number, userId: number): Promise<void> {
     const key = `${this.TYPING_PREFIX}${conversationId}`;
     
-    // Remove user from typing set
     await this.redis.srem(key, userId.toString());
 
-    // Emit to conversation room
     const roomId = `conversation:${conversationId}`;
     await this.socketService.emitToRoom(roomId, 'user-typing', {
       conversation_id: conversationId,

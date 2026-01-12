@@ -16,7 +16,7 @@ import { ChatThrottlerGuard } from '../guard/throttler.guard';
           {
             ttl: 60,   // 60 seconds window
             limit: 90, // 90 requests per window
-            // blockDuration: 300, // Uncomment and set if you want blocking after limit
+            // blockDuration: 300,
           },
         ],
         storage: new RedisThrottlerStorage(redisService),

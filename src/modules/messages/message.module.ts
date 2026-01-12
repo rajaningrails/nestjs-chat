@@ -11,6 +11,7 @@ import { Conversation } from '../conversations/entities/conversation.entity';
 import { messageQueueConfig } from 'src/infrastructure/bullmq';
 import { ConversationsModule } from '../conversations/conversation.module';
 import { UsersModule } from '../users/users.module';
+import { MessageGateway } from './gateway/message.gateway';
 
 @Module({
   imports: [
@@ -28,7 +29,7 @@ import { UsersModule } from '../users/users.module';
     MessageRepository,
     MessageService,
     MessageProcessor,
-    // MessageGateway,
+    MessageGateway,
   ],
   exports: [IMessageRepositoryToken, MessageRepository, MessageService],
 })

@@ -9,11 +9,12 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UseGuards } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { SocketService } from 'src/common/services/socket/socket.service';
 import { PresenceService } from 'src/common/services/socket/presence.service';
-import { MessageService } from '../services/message.service';
 import { ConversationService } from 'src/modules/conversations/services/conversation.service';
+import { TypingService } from 'src/common/services/socket/typing.service';
+import { MessageService } from '../services/message.service';
 
 interface AuthenticatedSocket extends Socket {
   userId?: number;
@@ -28,10 +29,11 @@ interface AuthenticatedSocket extends Socket {
   },
   transports: ['websocket', 'polling'],
   pingInterval: 25000,
-  pingTimeout: 60000,
+  pingTimeout: 25000,
 })
 export class MessageGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
@@ -40,52 +42,50 @@ export class MessageGateway
 
   constructor(
     private readonly socketService: SocketService,
+    private readonly typingService: TypingService,
     private readonly presenceService: PresenceService,
+    private readonly conversationService: ConversationService,
     private readonly messageService: MessageService,
-    private readonly conversationService: ConversationService
-  ) { }
+  ) {}
 
   afterInit(server: Server) {
     this.socketService.setServer(server);
     this.logger.log('🚀 WebSocket Gateway initialized');
-    this.setupServerMiddleware();
+    // this.setupServerMiddleware();
   }
 
-  /**
-   * Setup authentication middleware
-   */
-  private setupServerMiddleware() {
-    this.server.use(async (socket: AuthenticatedSocket, next) => {
-      try {
-        // const token = 
-        //   socket.handshake.auth?.token || 
-        //   socket.handshake.headers?.authorization?.replace('Bearer ', '');
+  // private setupServerMiddleware() {
+  //   this.server.use(async (socket: AuthenticatedSocket, next) => {
+  //     try {
+  //       // const token =
+  //       //   socket.handshake.auth?.token ||
+  //       //   socket.handshake.headers?.authorization?.replace('Bearer ', '');
 
-        // if (!token) {
-        //   return next(new Error('Authentication required'));
-        // }
+  //       // if (!token) {
+  //       //   return next(new Error('Authentication required'));
+  //       // }
 
-        // const payload = await this.jwtService.verifyAsync(token);
+  //       // const payload = await this.jwtService.verifyAsync(token);
 
-        // socket.userId = payload.sub || payload.userId;
-        // socket.schoolId = payload.schoolId;
+  //       // socket.userId = payload.sub || payload.userId;
+  //       // socket.schoolId = payload.schoolId;
 
-        next();
-      } catch (error) {
-        this.logger.error('Authentication failed:', error);
-        // next(new Error('Invalid token'));
-      }
-    });
-  }
+  //       next();
+  //     } catch (error) {
+  //       this.logger.error('Authentication failed:', error);
+  //       // next(new Error('Invalid token'));
+  //     }
+  //   });
+  // }
 
   /**
    * Handle new client connection
    */
   async handleConnection(client: AuthenticatedSocket) {
     try {
-      let userId: string|number = client.handshake.query?.sender_id as string;
+      let userId: string | number = client.handshake.query?.sender_id as string;
       if (!userId) {
-        this.logger.warn(`Connection rejected: No user ID`,client.handshake);
+        this.logger.warn(`Connection rejected: No user ID`, client.handshake);
         client.disconnect();
         return;
       }
@@ -98,23 +98,12 @@ export class MessageGateway
         return;
       }
 
-      // Set user as online
       await this.presenceService.setOnline(userId);
 
-      // Build presence audience (get user's contacts)
-      const contacts = await this.conversationService.getUserContacts(userId);
-      await this.presenceService.buildPresenceAudience(
-        userId,
-        contacts.map(c => c.id)
-      );
-
-      // Join user's conversation rooms
       await this.joinUserConversations(client, userId);
 
-      // Setup heartbeat
       this.setupHeartbeat(client, userId);
 
-      // Emit connection success
       client.emit('connected', {
         userId,
         socketId: client.id,
@@ -137,17 +126,13 @@ export class MessageGateway
 
       if (!userId) return;
 
-      // Clear heartbeat
       this.clearHeartbeat(client.id);
 
-      // Remove socket mapping
       await this.socketService.removeUserSocket(userId, client.id);
 
-      // Check if user has other active connections
       const isStillOnline = await this.socketService.isUserOnline(userId);
 
       if (!isStillOnline) {
-        // Set user as offline
         await this.presenceService.setOffline(userId);
       }
 
@@ -161,25 +146,19 @@ export class MessageGateway
    * Setup heartbeat monitoring
    */
   private setupHeartbeat(client: AuthenticatedSocket, userId: number) {
-    // Clear any existing timeout
     this.clearHeartbeat(client.id);
 
-    // Listen for pong
     client.on('pong', async () => {
-      await this.presenceService.updateLastSeen(userId);
-
-      // Reset timeout
       this.clearHeartbeat(client.id);
 
       const timeout = setTimeout(() => {
-        this.logger.warn(`Heartbeat timeout for user ${userId}`);
+        this.presenceService.setOffline(userId);
         client.disconnect();
-      }, 60000); // 60 second timeout
+      }, 25000);
 
       this.heartbeatTimeouts.set(client.id, timeout);
     });
 
-    // Send initial ping
     client.emit('ping');
   }
 
@@ -199,11 +178,11 @@ export class MessageGateway
    */
   private async joinUserConversations(
     client: AuthenticatedSocket,
-    userId: number
+    userId: number,
   ): Promise<void> {
     try {
-      const conversations = await this.conversationService
-        .getUserConversations(userId);
+      const conversations =
+        await this.conversationService.getUserConversations(userId);
 
       for (const conversation of conversations) {
         const roomId = `conversation:${conversation.id}`;
@@ -211,7 +190,7 @@ export class MessageGateway
       }
 
       this.logger.log(
-        `User ${userId} joined ${conversations.length} conversation rooms`
+        `User ${userId} joined ${conversations.length} conversation rooms`,
       );
     } catch (error) {
       this.logger.error('Failed to join user conversations:', error);
@@ -224,18 +203,14 @@ export class MessageGateway
   @SubscribeMessage('typing')
   async handleTyping(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { conversation_id: number; is_typing: boolean }
+    @MessageBody() data: { conversation_id: number; is_typing: boolean },
   ) {
     const userId = client.userId;
 
     if (!userId) return;
 
     try {
-      // await this.messageService.emitTypingIndicator(
-      //   data.conversation_id,
-      //   userId,
-      //   data.is_typing
-      // );
+      await this.typingService.startTyping(data.conversation_id, userId);
     } catch (error) {
       this.logger.error('Failed to handle typing indicator:', error);
     }
@@ -247,16 +222,19 @@ export class MessageGateway
   @SubscribeMessage('mark-seen')
   async handleMarkSeen(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { message_id: string }
+    @MessageBody() data: { message_id: string; group_id: string },
   ) {
     const userId = client.userId;
 
     if (!userId) return;
 
     try {
-      // await this.messageService.markMessageAsSeen(data.message_id, userId);
+      if (data?.group_id) {
+        this.messageService.groupChatMessageSeen(data.message_id);
+      } else {
+        this.messageService.oneToOneChatMessageSeen(data.message_id);
+      }
     } catch (error) {
-      this.logger.error('Failed to mark message as seen:', error);
       client.emit('error', {
         event: 'mark-seen',
         error: 'Failed to mark message as seen',
@@ -270,25 +248,13 @@ export class MessageGateway
   @SubscribeMessage('join-conversation')
   async handleJoinConversation(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { conversation_id: number }
+    @MessageBody() data: { conversation_id: number },
   ) {
     const userId = client.userId;
 
     if (!userId) return;
 
     try {
-      // Verify user has access to this conversation
-      // const hasAccess = await this.conversationService
-      //   .userHasAccess(data.conversation_id, userId);
-
-      // if (!hasAccess) {
-      //   client.emit('error', {
-      //     event: 'join-conversation',
-      //     error: 'Access denied',
-      //   });
-      //   return;
-      // }
-
       const roomId = `conversation:${data.conversation_id}`;
       await this.socketService.joinRoom(client.id, roomId, userId);
 
@@ -311,7 +277,7 @@ export class MessageGateway
   @SubscribeMessage('leave-conversation')
   async handleLeaveConversation(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { conversation_id: number }
+    @MessageBody() data: { conversation_id: number },
   ) {
     const userId = client.userId;
 
@@ -330,40 +296,185 @@ export class MessageGateway
     }
   }
 
-  /**
-   * Handle user activity (update last seen)
-   */
-  @SubscribeMessage('activity')
-  async handleActivity(@ConnectedSocket() client: AuthenticatedSocket) {
-    const userId = client.userId;
-
-    if (!userId) return;
-
+  async emitGroupCreated(
+    conversationId: number,
+    memberIds: number[],
+    groupData: any,
+  ) {
     try {
-      await this.presenceService.updateLastSeen(userId);
-      await this.presenceService.setOnline(userId);
+      await this.socketService.emitToUsers(memberIds, 'group-created', {
+        conversation_id: conversationId,
+        conversation: groupData,
+        timestamp: new Date(),
+      });
+
+      this.logger.log(
+        `Group ${conversationId} created, notified ${memberIds.length} members`,
+      );
     } catch (error) {
-      this.logger.error('Failed to handle activity:', error);
+      this.logger.error('Failed to emit group created event:', error);
     }
   }
 
-  /**
-   * Get online status of users
-   */
-  @SubscribeMessage('get-online-status')
-  async handleGetOnlineStatus(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { user_ids: number[] }
+  async emitGroupUpdated(
+    conversationId: number,
+    updates: any,
+    updatedBy: number,
   ) {
     try {
-      const statuses = await this.presenceService
-        .getOnlineStatuses(data.user_ids);
+      const roomId = `conversation:${conversationId}`;
+      await this.socketService.emitToRoom(roomId, 'group-updated', {
+        conversation_id: conversationId,
+        updates,
+        updated_by: updatedBy,
+        timestamp: new Date(),
+      });
 
-      const result = Object.fromEntries(statuses);
-
-      client.emit('online-statuses', result);
+      this.logger.log(`Group ${conversationId} updated by user ${updatedBy}`);
     } catch (error) {
-      this.logger.error('Failed to get online statuses:', error);
+      this.logger.error('Failed to emit group updated event:', error);
+    }
+  }
+
+  async emitMemberAdded(
+    conversationId: number,
+    newMemberIds: number[],
+    addedBy: number,
+    groupData: any,
+  ) {
+    try {
+      const roomId = `conversation:${conversationId}`;
+
+      await this.socketService.emitToRoom(
+        roomId,
+        'member-added',
+        {
+          conversation_id: conversationId,
+          new_members: newMemberIds,
+          added_by: addedBy,
+          timestamp: new Date(),
+        },
+        addedBy,
+      );
+
+      for (const memberId of newMemberIds) {
+        const sockets = await this.socketService.getUserSockets(memberId);
+
+        for (const socketId of sockets) {
+          await this.socketService.joinRoom(socketId, roomId, memberId);
+        }
+
+        await this.socketService.emitToUser(memberId, 'added-to-group', {
+          conversation_id: conversationId,
+          conversation: groupData,
+          added_by: addedBy,
+          timestamp: new Date(),
+        });
+      }
+
+      this.logger.log(
+        `Added ${newMemberIds.length} members to group ${conversationId}`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to emit member added event:', error);
+    }
+  }
+
+  async emitMemberRemoved(
+    conversationId: number,
+    removedMemberId: number,
+    removedBy: number,
+  ) {
+    try {
+      const roomId = `conversation:${conversationId}`;
+
+      await this.socketService.emitToRoom(roomId, 'member-removed', {
+        conversation_id: conversationId,
+        removed_member: removedMemberId,
+        removed_by: removedBy,
+        timestamp: new Date(),
+      });
+
+      const sockets = await this.socketService.getUserSockets(removedMemberId);
+      for (const socketId of sockets) {
+        await this.socketService.leaveRoom(socketId, roomId, removedMemberId);
+      }
+
+      await this.socketService.emitToUser(
+        removedMemberId,
+        'removed-from-group',
+        {
+          conversation_id: conversationId,
+          removed_by: removedBy,
+          timestamp: new Date(),
+        },
+      );
+
+      this.logger.log(
+        `Removed user ${removedMemberId} from group ${conversationId}`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to emit member removed event:', error);
+    }
+  }
+
+  async emitGroupDeleted(conversationId: number, deletedBy: number) {
+    try {
+      const roomId = `conversation:${conversationId}`;
+
+      await this.socketService.emitToRoom(roomId, 'group-deleted', {
+        conversation_id: conversationId,
+        deleted_by: deletedBy,
+        timestamp: new Date(),
+      });
+
+      await this.socketService.clearRoom(roomId);
+
+      this.logger.log(`Group ${conversationId} deleted by user ${deletedBy}`);
+    } catch (error) {
+      this.logger.error('Failed to emit group deleted event:', error);
+    }
+  }
+
+  async emitNewMessage(conversationId: number, message: any, senderId: number) {
+    try {
+      const roomId = `conversation:${conversationId}`;
+
+      await this.socketService.emitToRoom(
+        roomId,
+        'new-message',
+        {
+          conversation_id: conversationId,
+          message,
+          timestamp: new Date(),
+        },
+        senderId,
+      );
+
+      this.logger.log(
+        `New message in conversation ${conversationId} from user ${senderId}`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to emit new message event:', error);
+    }
+  }
+
+  async emitMessageDeleted(
+    conversationId: number,
+    messageId: string,
+    deletedBy: number,
+  ) {
+    try {
+      const roomId = `conversation:${conversationId}`;
+
+      await this.socketService.emitToRoom(roomId, 'message-deleted', {
+        conversation_id: conversationId,
+        message_id: messageId,
+        deleted_by: deletedBy,
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      this.logger.error('Failed to emit message deleted event:', error);
     }
   }
 }

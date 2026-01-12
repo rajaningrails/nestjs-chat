@@ -11,8 +11,7 @@ import { UserType } from './user-type.enum';
 
 export class CreateUserDto {
   @IsUUID()
-  @IsNotEmpty()
-  id: string;
+  id?: string;
   
   @IsInt()
   @IsNotEmpty()

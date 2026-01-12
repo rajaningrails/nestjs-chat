@@ -21,7 +21,7 @@ export class ChatGroupMember {
   @IsUUID()
   id: string;
 
-  @Column({ type: 'string' })
+  @Column({ type: 'varchar', length: 36 })
   group_id: string;
 
   @Column({ type: 'int' })

@@ -30,7 +30,7 @@ export class Conversation {
   @Column({ type: 'int' })
   school_id: number;
 
-  @Column({ type: 'string', nullable: true })
+  @Column({ type: 'varchar', length: 36, nullable: true })
   group_id: string;
 
   @Column({ type: 'enum', enum: ConversationType })
@@ -39,7 +39,7 @@ export class Conversation {
   @Column({ type: 'enum', enum: GroupType, nullable: true })
   group_type: GroupType;
 
-  @Column({ type: 'varchar', nullable: true })
+  @Column({ type: 'varchar', length: 36,  nullable: true })
   last_message_id: string;
 
   @Column({ type: 'int', nullable: true })

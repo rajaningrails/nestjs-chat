@@ -29,7 +29,7 @@ export class Message {
   @IsUUID()
   id: string;
 
-  @Column({ type: 'string', nullable: false })
+  @Column({ type: 'varchar', length: 36 })
   conversation_id: string;
 
   @Column({ type: 'int' })
@@ -41,7 +41,7 @@ export class Message {
   @Column({ type: 'int', nullable: true })
   receiver_id: number;
 
-  @Column({ type: 'string', nullable: true })
+  @Column({ type: 'varchar', length: 36, nullable: true })
   group_id: string;
 
   @Column({

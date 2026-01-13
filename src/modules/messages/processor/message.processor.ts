@@ -344,7 +344,7 @@ export class MessageProcessor
         .del(this.DELETE_BUFFER_KEY)
         .exec();
 
-      const ids = result?.[0]?.[1] as string[];
+      const ids = result?.[0]?.[1] as number[];
       
       if (!ids || ids.length === 0) {
         return;
@@ -394,7 +394,7 @@ export class MessageProcessor
         .del(this.USER_SEEN_BUFFER_KEY)
         .exec();
 
-      const ids = result?.[0]?.[1] as string[];
+      const ids = result?.[0]?.[1] as number[];
       
       if (!ids || ids.length === 0) {
         return;

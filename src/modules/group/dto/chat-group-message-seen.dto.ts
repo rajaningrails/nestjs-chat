@@ -1,17 +1,17 @@
-import { IsInt, IsNotEmpty, IsUUID } from 'class-validator';
+import { IsInt, IsNotEmpty, IsNumber } from 'class-validator';
 
 export class CreateGroupMessageSeenDto {
-  @IsUUID()
+  @IsNumber()
   @IsNotEmpty()
-  id: string;
+  id: number;
 
-  @IsUUID()
+  @IsNumber()
   @IsNotEmpty()
-  conversation_id: string;
+  conversation_id: number;
 
-  @IsUUID()
+  @IsNumber()
   @IsNotEmpty()
-  message_id: string;
+  message_id: number;
 
   @IsInt()
   @IsNotEmpty()

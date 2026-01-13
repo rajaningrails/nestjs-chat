@@ -1,11 +1,11 @@
-import { IsIn, IsInt, IsUUID } from 'class-validator';
+import { IsIn, IsInt, IsNumber } from 'class-validator';
 
 export class DeleteMessageDto {
-  @IsUUID()
-  messageId: string;
+  @IsNumber()
+  messageId: number;
 
-  @IsUUID()
-  conversationID: string;
+  @IsNumber()
+  conversationID: number;
 
   @IsInt()
   receiverID: number;

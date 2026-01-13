@@ -33,3 +33,9 @@ export function escapeValue(value: any): string {
   if (typeof value === 'number') return value.toString();
   return `'${String(value).replace(/'/g, "''")}'`;
 }
+
+export function generateSafeNumericId(): number {
+  const ts = Math.floor(Date.now() / 1000); 
+  const random = Math.floor(Math.random() * 100000);
+  return ts * 100000 + random;
+}

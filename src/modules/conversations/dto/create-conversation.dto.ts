@@ -4,22 +4,22 @@ import {
   IsNotEmpty,
   IsOptional,
   IsDateString,
-  IsUUID,
+  IsNumber,
 } from 'class-validator';
 import { ConversationType, GroupType } from './conversations.enum';
 
 export class CreateConversationDto {
-  @IsUUID()
+  @IsNumber()
   @IsNotEmpty()
-  id: string;
+  id: number;
   
   @IsInt()
   @IsNotEmpty()
   school_id: number;
 
-  @IsUUID()
+  @IsNumber()
   @IsOptional()
-  group_id?: string;
+  group_id?: number;
 
   @IsEnum(ConversationType)
   @IsNotEmpty()
@@ -30,15 +30,15 @@ export class CreateConversationDto {
   group_type?: GroupType;
 
   @IsOptional()
-  @IsUUID()
-  last_message_id?: string;
+  @IsNumber()
+  last_message_id?: number;
 
   @IsOptional()
-  @IsInt()
+  @IsNumber()
   last_message_sender_id?: number;
 
   @IsOptional()
-  @IsInt()
+  @IsNumber()
   last_message_receiver_id?: number;
 
   @IsDateString()

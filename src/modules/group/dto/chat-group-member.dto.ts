@@ -1,13 +1,13 @@
-import { IsInt, IsNotEmpty, IsUUID } from 'class-validator';
+import { IsInt, IsNotEmpty, IsNumber } from 'class-validator';
 
 export class CreateChatGroupMemberDto {
-  @IsUUID()
+  @IsNumber()
   @IsNotEmpty()
-  id: string;
+  id: number;
 
-  @IsUUID()
+  @IsNumber()
   @IsNotEmpty()
-  group_id: string;
+  group_id: number;
 
   @IsInt()
   @IsNotEmpty()

@@ -15,21 +15,19 @@ import { ChatGroupMember } from './chat-group-member.entity';
 import { GroupMessageSeen } from './chat-group-message-seen.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
-import { IsUUID } from 'class-validator';
 
 @Entity('chat_groups')
 @Index(['group_name'], { unique: true })
 @Index('idx_school_id', ['school_id'])
 @Index('idx_created_by', ['created_by'])
 export class ChatGroup {
-  @PrimaryColumn('uuid')
-  @IsUUID()
-  id: string;
+  @PrimaryColumn({ type: 'bigint', unsigned: true })
+  id: number;
 
   @Column({ type: 'int', nullable: true })
   school_id?: number;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 400 })
   group_name: string;
 
   @Column({ type: 'text', nullable: true })
@@ -38,14 +36,14 @@ export class ChatGroup {
   @Column({ type: 'int' })
   created_by: number;
 
-  @CreateDateColumn({ name: 'created_at', type: 'datetime' })
+  @CreateDateColumn()
   created_at: Date;
 
-  @UpdateDateColumn({ name: 'updated_at', type: 'datetime' })
+  @UpdateDateColumn()
   updated_at: Date;
 
-  @DeleteDateColumn({ name: 'deleted_at', type: 'datetime', nullable: true })
-  deleted_at: Date;
+  @DeleteDateColumn({ nullable: true })
+  deleted_at?: Date;
 
   @ManyToOne(() => User, (user) => user.createdGroups, { nullable: false })
   @JoinColumn({ name: 'created_by', referencedColumnName: 'user_id' })

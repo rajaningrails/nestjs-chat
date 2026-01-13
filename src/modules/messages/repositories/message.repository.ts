@@ -36,7 +36,7 @@ export class MessageRepository implements IMessageRepository {
     });
   }
 
-  async findById(id: any): Promise<Message | null> {
+  async findById(id: number): Promise<Message | null> {
     return this.messageRepository.findOne({
       where: { id },
       withDeleted: false,
@@ -48,14 +48,14 @@ export class MessageRepository implements IMessageRepository {
     return this.messageRepository.save(message);
   }
 
-  async countConversationMessage(conversationId: string): Promise<number> {
+  async countConversationMessage(conversationId: number): Promise<number> {
     return this.messageRepository.count({
       where: { conversation_id: conversationId },
     });
   }
 
   async getConversationMessages(
-    conversation_id: string,
+    conversation_id: number,
     limit = 25,
     offset = 0,
   ): Promise<Message[]> {
@@ -86,7 +86,7 @@ export class MessageRepository implements IMessageRepository {
     }
   }
 
-  async oneToOneChatMessageSeenBatch(ids: string[]): Promise<void> {
+  async oneToOneChatMessageSeenBatch(ids: number[]): Promise<void> {
     try {
       await this.messageRepository
         .createQueryBuilder()
@@ -100,23 +100,23 @@ export class MessageRepository implements IMessageRepository {
   }
 
   async update(
-    id: string,
+    id: number,
     messageData: Partial<Message>,
   ): Promise<Message | null> {
     await this.messageRepository.update(id, messageData);
     return this.findById(id);
   }
 
-  async markAsSeen(id: string, seenAt: Date = new Date()): Promise<void> {
+  async markAsSeen(id: number, seenAt: Date = new Date()): Promise<void> {
     await this.messageRepository.update(id, { seen_at: seenAt });
   }
 
-  async softDelete(id: string): Promise<boolean> {
+  async softDelete(id: number): Promise<boolean> {
     const result = await this.messageRepository.softDelete(id);
     return !!result.affected;
   }
 
-  async deleteBatch(ids: string[]): Promise<void> {
+  async deleteBatch(ids: number[]): Promise<void> {
     try {
       await this.messageRepository
         .createQueryBuilder()

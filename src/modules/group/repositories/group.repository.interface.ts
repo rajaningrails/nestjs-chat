@@ -28,7 +28,7 @@ export interface ICreateGroup {
 }
 
 export interface IRepositoryGroupResponse {
-  group_id: string;
+  group_id: number;
 }
 export interface IGroupRepository {
   update({
@@ -55,5 +55,5 @@ export interface IGroupRepository {
     user_id: number,
   ): Promise<ChatGroup[] | null>;
 
-  findByIdWithGroupMembers(id: string): Promise<ChatGroup | null>;
+  findByIdWithGroupMembers(id: number): Promise<ChatGroup | null>;
 }

@@ -17,11 +17,11 @@ export interface IMessageRepository {
   save(messageData: Partial<CreateMessageDto>): Promise<Message>;
 
   update(
-    id: string,
+    id: number,
     messageData: Partial<Message>,
   ): Promise<Message | null>;
 
-  markAsSeen(id: string, seenAt?: Date): Promise<void>;
+  markAsSeen(id: number, seenAt?: Date): Promise<void>;
 
-  softDelete(id: string): Promise<boolean>;
+  softDelete(id: number): Promise<boolean>;
 }

@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import {
   Injectable,
   Inject,
@@ -14,6 +13,7 @@ import { ConversationRepository } from 'src/modules/conversations/repositories/c
 import { profanity } from '@2toad/profanity';
 import { IUserRepositoryToken } from 'src/modules/users/repositories/user.repository.interface';
 import { IConversationRepositoryToken } from 'src/modules/conversations/repositories/conversation.repository.interface';
+import { generateSafeNumericId } from 'src/utils/helpers';
 
 @Injectable()
 export class SendMessageUseCase {
@@ -39,7 +39,7 @@ export class SendMessageUseCase {
       throw new NotFoundException('Conversation does not exists');
     }
     const messageData: MessageDto = {
-      id: uuidv4(),
+      id: generateSafeNumericId(),
       conversation_id: request.conversation_id,
       sender_id: request.sender_id,
       receiver_id: request.receiver_id,

@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { Injectable, ConflictException, Inject } from '@nestjs/common';
 import { IGroupRepositoryToken } from '../repositories/group.repository.interface';
 import {
@@ -13,6 +12,7 @@ import { GroupService } from '../service/group.service';
 import { ConversationService } from 'src/modules/conversations/services/conversation.service';
 import { MessageService } from 'src/modules/messages/services/message.service';
 import { CreateChatGroupMemberDto } from '../dto/chat-group-member.dto';
+import { generateSafeNumericId } from 'src/utils/helpers';
 
 @Injectable()
 export class CreateGroupUseCase {
@@ -27,7 +27,7 @@ export class CreateGroupUseCase {
 
   async execute(
     request: CreateChatGroupDto,
-  ): Promise<{ conversation_id: string; group_id: string }> {
+  ): Promise<{ conversation_id: number; group_id: number }> {
     const exists = await this.groupRepository.findGroupByName(
       request.group_name,
     );
@@ -51,10 +51,10 @@ export class CreateGroupUseCase {
       allMembers?.map((p) => ({
         user_id: p.id,
         name: p.name,
-        image: p.image || null,
+        image: p.image?? "",
         school_id: request.school_id,
         type: p.type,
-        id: uuidv4(),
+        id: generateSafeNumericId(),
       })),
     );
 
@@ -72,15 +72,15 @@ export class CreateGroupUseCase {
     ) {
       group_type = GroupType.TEACHERS_GROUP;
     }
-    const conversation_id = uuidv4();
-    const message_id = uuidv4();
-    const group_id = uuidv4();
+    const conversation_id = generateSafeNumericId();
+    const message_id = generateSafeNumericId();
+    const group_id = generateSafeNumericId();
     request.id = group_id;
 
     await this.groupService.createGroup(request);
     const members: CreateChatGroupMemberDto[] = allMembers.map((m) => ({
       group_id: group_id,
-      id: uuidv4(),
+      id: generateSafeNumericId(),
       user_id: m.id,
     }));
     await this.groupService.createGroupMembers(members);

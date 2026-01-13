@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { IGroupRepositoryToken } from '../repositories/group.repository.interface';
 import {
@@ -11,6 +10,7 @@ import { UserService } from 'src/modules/users/services/user.service';
 import { GroupService } from '../service/group.service';
 import { UserRepository } from 'src/modules/users/repositories/user.repository';
 import { CreateUserDto } from 'src/modules/users/dto/create-user.dto';
+import { generateSafeNumericId } from 'src/utils/helpers';
 
 @Injectable()
 export class UpdateGroupUseCase {
@@ -39,14 +39,14 @@ export class UpdateGroupUseCase {
         image: m.image ?? null,
         school_id: school_id,
         type: m.type,
-        id: uuidv4(),
+        id: generateSafeNumericId(),
       }));
       await this.userService.createUsers(usersToCreate);
     }
   }
   async execute(
     request: UpdateGroupDto,
-  ): Promise<{ conversation_id: string; group_id: string }> {
+  ): Promise<{ conversation_id: number; group_id: number }> {
     const exists = await this.groupRepository.findById(request.group_id!);
     if (!exists) {
       throw new NotFoundException('Group does not exists');
@@ -84,7 +84,7 @@ export class UpdateGroupUseCase {
     const members = allMembers.map((m) => ({
       group_id: request.group_id,
       user_id: m.id,
-      id: uuidv4(),
+      id: generateSafeNumericId(),
     }))
     await this.groupService.updateGroupMembers(members)
     return {

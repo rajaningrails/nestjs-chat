@@ -1,6 +1,6 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { Type } from 'class-transformer';
-import { IsArray, IsEmail, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { IsArray, IsEmail, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
 
 export class PartialCreateUserDto{
@@ -26,9 +26,9 @@ export class PartialCreateUserDto{
 }
 
 export class CreateChatGroupDto {
-  @IsUUID()
-  @IsNotEmpty({ message: 'id is required' })
-  id: string;
+  @IsNumber()
+  @IsOptional()
+  id: number;
 
   @IsInt()
   @IsNotEmpty({ message: 'school_id is required' })
@@ -61,9 +61,9 @@ export class CreateChatGroupDto {
 
 
 export class UpdateGroupDto {
-  @IsInt()
+  @IsNumber()
   @IsNotEmpty({ message: 'group_id is required' })
-  group_id: string;
+  group_id: number;
 
   @IsInt()
   @IsNotEmpty({ message: 'school_id is required' })

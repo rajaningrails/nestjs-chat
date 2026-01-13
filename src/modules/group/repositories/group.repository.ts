@@ -44,7 +44,7 @@ export class GroupRepository implements IGroupRepository {
       .execute();
   }
 
-  async removeMembers(groupId: string): Promise<void> {
+  async removeMembers(groupId: number): Promise<void> {
     await this.groupMemberRepo.delete({
       group_id: groupId,
     });
@@ -130,10 +130,10 @@ export class GroupRepository implements IGroupRepository {
   }
 
   async groupMessageSeenBatch(payload: {
-    group_id: string;
+    group_id: number;
     user_id: number;
-    message_id: string;
-    conversation_id: string;
+    message_id: number;
+    conversation_id: number;
   }[]) {
     try {
       await this.groupMessageSeenRepo.save(payload);
@@ -205,11 +205,11 @@ export class GroupRepository implements IGroupRepository {
     };
   }
 
-  async findById(id: string): Promise<ChatGroup | null> {
+  async findById(id: number): Promise<ChatGroup | null> {
     return this.groupRepo.findOne({ where: { id, deleted_at: IsNull() } });
   }
 
-  async findByIdWithGroupMembers(id: string): Promise<ChatGroup | null> {
+  async findByIdWithGroupMembers(id: number): Promise<ChatGroup | null> {
     const group = await this.groupRepo.findOne({
       where: { id },
       withDeleted: false,

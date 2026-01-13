@@ -6,14 +6,14 @@ import {
   IsOptional,
   ValidateIf,
   IsArray,
-  IsUUID,
+  IsNumber,
   IsDate,
 } from 'class-validator';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
 
 export class CreateMessageDto {
-  @IsUUID()
-  id: string;
+  @IsNumber()
+  id: number;
 
   @IsInt()
   @IsNotEmpty()
@@ -23,9 +23,9 @@ export class CreateMessageDto {
   @IsNotEmpty()
   sender_id: number;
   
-  @IsString()
+  @IsNumber()
   @IsNotEmpty()
-  conversation_id: string
+  conversation_id: number
 
   @IsInt()
   @IsNotEmpty()

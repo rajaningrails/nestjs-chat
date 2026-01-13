@@ -35,7 +35,7 @@ export class ConversationController {
 
   @Get('/conversation-info')
   async findOne(
-    @Query('conversation_id') conversation_id: string,
+    @Query('conversation_id') conversation_id: number,
   ): Promise<Conversation | null> {
     return this.conversationRepository.findById(conversation_id);
   }
@@ -60,13 +60,13 @@ export class ConversationController {
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string) {
+  async remove(@Param('id') id: number) {
     return this.conversationRepository.softDelete(id);
   }
 
   @Get()
   async getConversationMessages(
-    @Query('conversation_id') conversation_id: string,
+    @Query('conversation_id') conversation_id: number,
     @Query('limit', new ParseIntPipe({ optional: true })) limit = 25,
     @Query('offset', new ParseIntPipe({ optional: true })) page = 1,
   ) {

@@ -85,7 +85,7 @@ export class ConversationService {
     }
   }
 
-  async getGroupMembers(groupId: string): Promise<number[]> {
+  async getGroupMembers(groupId: number): Promise<number[]> {
     try {
       const members = await this.dataSource.query(
         `
@@ -106,7 +106,7 @@ export class ConversationService {
     }
   }
 
-  async deleteConversation(conversationId: string) {
+  async deleteConversation(conversationId: number) {
     try {
       await this.dataSource.query(
         `

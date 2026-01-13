@@ -8,11 +8,11 @@ import {
   JoinColumn,
   OneToMany,
   PrimaryColumn,
+  DeleteDateColumn,
 } from 'typeorm';
-import { ConversationType, GroupType } from '../dto/conversations.enum';
+import { ConversationType } from '../dto/conversations.enum';
 import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
 import { Message } from 'src/modules/messages/entities/message.entity';
-import { IsUUID } from 'class-validator';
 import { GroupMessageSeen } from 'src/modules/group/entities/chat-group-message-seen.entity';
 
 @Entity('conversations')
@@ -23,39 +23,35 @@ import { GroupMessageSeen } from 'src/modules/group/entities/chat-group-message-
 @Index('idx_participants', ['school_id', 'type'])
 @Index('idx_updated_at', ['updated_at'])
 export class Conversation {
-  @PrimaryColumn('uuid')
-  @IsUUID()
-  id: string;
+  @PrimaryColumn({ type: 'bigint', unsigned: true })
+  id: number;
 
   @Column({ type: 'int' })
   school_id: number;
 
-  @Column({ type: 'varchar', length: 36, nullable: true })
-  group_id: string;
+  @Column({ type: 'bigint', unsigned: true, nullable: true })
+  group_id?: number;
 
   @Column({ type: 'enum', enum: ConversationType })
   type: ConversationType;
 
-  @Column({ type: 'enum', enum: GroupType, nullable: true })
-  group_type: GroupType;
-
-  @Column({ type: 'varchar', length: 36,  nullable: true })
-  last_message_id: string;
+  @Column({ type: 'bigint', unsigned: true, nullable: true })
+  last_message_id?: number;
 
   @Column({ type: 'int', nullable: true })
-  last_message_sender_id: number;
+  last_message_sender_id?: number;
 
   @Column({ type: 'int', nullable: true })
-  last_message_receiver_id: number;
+  last_message_receiver_id?: number;
 
-  @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
+  @CreateDateColumn()
   created_at: Date;
 
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
+  @UpdateDateColumn()
   updated_at: Date;
 
-  @UpdateDateColumn({ name: 'deleted_at', type: 'timestamp', nullable: true })
-  deleted_at: Date;
+  @DeleteDateColumn({ nullable: true })
+  deleted_at?: Date;
 
   @ManyToOne(() => ChatGroup, (group) => group.conversations, {
     nullable: true,

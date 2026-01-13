@@ -12,6 +12,10 @@ import { messageQueueConfig } from 'src/infrastructure/bullmq';
 import { ConversationsModule } from '../conversations/conversation.module';
 import { UsersModule } from '../users/users.module';
 import { MessageGateway } from './gateway/message.gateway';
+import { SendMessageUseCase } from './use-cases/send-message.use-case';
+import { CreateMessageUseCase } from './use-cases/create-message.use-case';
+import { DeleteMessageUseCase } from './use-cases/delete-message.use-case';
+import { MessageSeenUseCase } from './use-cases/message-seen.use-case';
 
 @Module({
   imports: [
@@ -30,6 +34,10 @@ import { MessageGateway } from './gateway/message.gateway';
     MessageService,
     MessageProcessor,
     MessageGateway,
+    SendMessageUseCase,
+    CreateMessageUseCase,
+    DeleteMessageUseCase,
+    MessageSeenUseCase
   ],
   exports: [IMessageRepositoryToken, MessageRepository, MessageService],
 })

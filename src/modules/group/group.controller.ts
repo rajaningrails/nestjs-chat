@@ -16,8 +16,8 @@ import { IGroupRepositoryToken } from './repositories/group.repository.interface
 import { UserType } from '../users/dto/user-type.enum';
 
 interface IResponse {
-  conversation_id: string;
-  group_id: string;
+  conversation_id: number;
+  group_id: number;
 }
 @Controller('group')
 export class GroupController {
@@ -57,7 +57,7 @@ export class GroupController {
   }
 
   @Get(':id')
-  async findById(@Param('id') id: string): Promise<ChatGroup | null> {
+  async findById(@Param('id') id: number): Promise<ChatGroup | null> {
     return this.groupRepository.findByIdWithGroupMembers(id);
   }
 

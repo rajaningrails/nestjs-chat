@@ -10,12 +10,12 @@ export interface IConversationRepository {
     offset?: number,
   ): Promise<Conversation[]>;
 
-  findById(id: string): Promise<Conversation | null>;
+  findById(id: number): Promise<Conversation | null>;
 
   save(conversationData: Partial<CreateConversationDto>): Promise<Conversation>;
 
   update(
-    id: string,
+    id: number,
     conversationData: Partial<UpdateConversationDto>,
   ): Promise<Conversation | null>;
 }

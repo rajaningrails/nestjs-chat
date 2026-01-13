@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { Injectable, Inject, BadRequestException } from '@nestjs/common';
 import { MessageService } from '../services/message.service';
 import { CreateMessageDto } from '../dto/create-message.dto';
@@ -9,6 +8,7 @@ import { UserService } from 'src/modules/users/services/user.service';
 import { CreateUserDto } from 'src/modules/users/dto/create-user.dto';
 import { profanity } from '@2toad/profanity';
 import { IConversationRepositoryToken } from 'src/modules/conversations/repositories/conversation.repository.interface';
+import { generateSafeNumericId } from 'src/utils/helpers';
 
 @Injectable()
 export class CreateMessageUseCase {
@@ -26,8 +26,8 @@ export class CreateMessageUseCase {
         throw new BadRequestException('Profanity not allowed');
       }
     }
-    let conversation_id: string | null = uuidv4();
-    let message_id: string | null = uuidv4();
+    let conversation_id: number | null = generateSafeNumericId();
+    let message_id: number | null = generateSafeNumericId();
     const existingConversation =
       await this.conversationRepository.checkIfConversationBetweenUserExists(
         request.sender_id,
@@ -56,7 +56,7 @@ export class CreateMessageUseCase {
     });
     const payloadUsers: CreateUserDto[] = [
       {
-        id: uuidv4(),
+        id: generateSafeNumericId(),
         school_id: request.school_id,
         name: request.sender_name,
         image: request.sender_image,
@@ -64,7 +64,7 @@ export class CreateMessageUseCase {
         user_id: request.sender_id,
       },
       {
-        id: uuidv4(),
+        id: generateSafeNumericId(),
         school_id: request.school_id,
         name: request.receiver_name,
         image: request.receiver_image,

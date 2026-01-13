@@ -45,7 +45,7 @@ export class ConversationRepository implements IConversationRepository {
       )
       .execute();
   }
-  async findById(id: string): Promise<Conversation | null> {
+  async findById(id: number): Promise<Conversation | null> {
     return this.conversationRepository.findOne({
       where: { id },
       withDeleted: false,
@@ -58,7 +58,7 @@ export class ConversationRepository implements IConversationRepository {
   }
 
   async update(
-    id: string,
+    id: number,
     conversationData: Partial<UpdateConversationDto>,
   ): Promise<Conversation | null> {
     await this.conversationRepository.update(id, conversationData);
@@ -68,7 +68,7 @@ export class ConversationRepository implements IConversationRepository {
   async upsert(
     convData: Partial<CreateConversationDto>,
     manager?: EntityManager,
-  ): Promise<string> {
+  ): Promise<number> {
     const repo = manager
       ? manager.getRepository(Conversation)
       : this.conversationRepository;
@@ -96,7 +96,7 @@ export class ConversationRepository implements IConversationRepository {
   }
 
   async updateLastMessage(
-    conversationId: string,
+    conversationId: number,
     data: Partial<Conversation>,
     manager?: EntityManager,
   ) {
@@ -128,8 +128,8 @@ export class ConversationRepository implements IConversationRepository {
   }
 
   async updateLastMessageSafe(data: {
-    conversationId: string;
-    messageId: string;
+    conversationId: number;
+    messageId: number;
     message: string | null;
     sender_id: number;
     receiver_id: number;
@@ -177,7 +177,7 @@ export class ConversationRepository implements IConversationRepository {
   }
 
   async findConversationGroupMemberIds(
-    conversationId: string,
+    conversationId: number,
   ): Promise<number[]> {
     const conversation = await this.conversationRepository
       .createQueryBuilder('conversation')
@@ -191,7 +191,7 @@ export class ConversationRepository implements IConversationRepository {
     return conversation.map((row) => row.member_user_id);
   }
 
-  async softDelete(conversationId: string): Promise<boolean> {
+  async softDelete(conversationId: number): Promise<boolean> {
     try {
       await this.conversationRepository.update(conversationId, {
         deleted_at: new Date(),
@@ -448,7 +448,7 @@ export class ConversationRepository implements IConversationRepository {
     }
   }
 
-  async getConversationMessages(conversation_id: string, limit = 25, page = 1) {
+  async getConversationMessages(conversation_id: number, limit = 25, page = 1) {
     try {
       const conversation_exists = await this.conversationRepository.findOne({
         where: {

@@ -5,13 +5,14 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUUID,
+  IsNumber,
 } from 'class-validator';
 import { UserType } from './user-type.enum';
 
 export class CreateUserDto {
-  @IsUUID()
-  id?: string;
+  @IsNumber()
+  @IsOptional()
+  id: number;
   
   @IsInt()
   @IsNotEmpty()
@@ -27,7 +28,7 @@ export class CreateUserDto {
   
   @IsOptional()
   @IsString()
-  image: string | null;
+  image: string;
 
   @IsEnum(UserType)
   @IsNotEmpty()

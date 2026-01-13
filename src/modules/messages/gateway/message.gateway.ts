@@ -222,7 +222,7 @@ export class MessageGateway
   @SubscribeMessage('mark-seen')
   async handleMarkSeen(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { message_id: string; group_id: string },
+    @MessageBody() data: { message_id: number; group_id: number },
   ) {
     const userId = client.userId;
 
@@ -461,7 +461,7 @@ export class MessageGateway
 
   async emitMessageDeleted(
     conversationId: number,
-    messageId: string,
+    messageId: number,
     deletedBy: number,
   ) {
     try {

@@ -4,14 +4,14 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUUID,
+  IsNumber,
 } from 'class-validator';
 import { UserType } from './user-type.enum';
 
 export class UpdateUserDto {
-  @IsUUID()
+  @IsNumber()
   @IsNotEmpty()
-  id: string;
+  id: number;
   
   @IsInt()
   @IsNotEmpty()
@@ -27,7 +27,7 @@ export class UpdateUserDto {
   
   @IsOptional()
   @IsString()
-  image: string | null;
+  image: string;
 
   @IsEnum(UserType)
   @IsNotEmpty()

@@ -7,10 +7,7 @@ import {
 import { GroupRepository } from '../repositories/group.repository';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
 import { CreateChatGroupDto } from '../dto/chat-group.dto';
-import { UserService } from 'src/modules/users/services/user.service';
 import { GroupService } from '../service/group.service';
-import { ConversationService } from 'src/modules/conversations/services/conversation.service';
-import { MessageService } from 'src/modules/messages/services/message.service';
 import { CreateChatGroupMemberDto } from '../dto/chat-group-member.dto';
 import { generateSafeNumericId } from 'src/utils/helpers';
 
@@ -19,10 +16,7 @@ export class CreateGroupUseCase {
   constructor(
     @Inject(IGroupRepositoryToken)
     private readonly groupRepository: GroupRepository,
-    private readonly userService: UserService,
-    private readonly conversationService: ConversationService,
     private readonly groupService: GroupService,
-    private readonly messageService: MessageService,
   ) {}
 
   async execute(
@@ -46,17 +40,14 @@ export class CreateGroupUseCase {
       ...(request.studentDetails || []),
       ...(request.staffDetails || []),
     ];
-
-    await this.userService.createUsers(
-      allMembers?.map((p) => ({
-        user_id: p.id,
-        name: p.name,
-        image: p.image?? "",
-        school_id: request.school_id,
-        type: p.type,
-        id: generateSafeNumericId(),
-      })),
-    );
+    const users = allMembers?.map((p) => ({
+      user_id: p.id,
+      name: p.name,
+      image: p.image ?? '',
+      school_id: request.school_id,
+      type: p.type,
+      id: generateSafeNumericId(),
+    }));
 
     let group_type: GroupType = GroupType.STUDENTS_GROUP;
     if (
@@ -77,30 +68,33 @@ export class CreateGroupUseCase {
     const group_id = generateSafeNumericId();
     request.id = group_id;
 
-    await this.groupService.createGroup(request);
     const members: CreateChatGroupMemberDto[] = allMembers.map((m) => ({
       group_id: group_id,
       id: generateSafeNumericId(),
       user_id: m.id,
     }));
-    await this.groupService.createGroupMembers(members);
-    await this.conversationService.createConversation({
-      id: conversation_id,
-      school_id: request.school_id,
-      type: ConversationType.GROUP,
-      group_id: request.id,
-      group_type,
-      last_message_sender_id: request.created_by,
-      last_message_id: message_id,
+    await this.groupService.createGroup({
+      users,
+      group_members: members,
+      conversation: {
+        id: conversation_id,
+        school_id: request.school_id,
+        type: ConversationType.GROUP,
+        group_id: request.id,
+        group_type,
+        last_message_sender_id: request.created_by,
+        last_message_id: message_id,
+      },
+      message: {
+        conversation_id,
+        id: message_id,
+        school_id: request.school_id,
+        sender_id: request.created_by,
+        group_id: group_id,
+        message: 'New group has been created',
+      },
     });
-    await this.messageService.createMessage({
-      conversation_id,
-      id: message_id,
-      school_id: request.school_id,
-      sender_id: request.created_by,
-      group_id: group_id,
-      message: 'New group has been created',
-    });
+
     return {
       conversation_id,
       group_id: request.id,

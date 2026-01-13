@@ -10,8 +10,8 @@ export class GroupService {
     @InjectQueue(GroupProcessorConfig.queue_name) private groupQueue: Queue,
   ) {}
 
-  async createGroup(payload: CreateChatGroupDto) {
-    const data: CreateChatGroupDto = {
+  async createGroup(payload: any) {
+    const data: any = {
       ...payload,
     };
 

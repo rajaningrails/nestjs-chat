@@ -7,6 +7,7 @@ import {
   Index,
   OneToMany,
   PrimaryColumn,
+  PrimaryGeneratedColumn,
 } from 'typeorm';
 import { UserType } from '../dto/user-type.enum';
 import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
@@ -15,7 +16,7 @@ import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
 @Unique(['school_id', 'user_id'])
 @Index(['user_id'])
 export class User {
-  @PrimaryColumn({ type: 'bigint', unsigned: true })
+  @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ type: 'int' })
@@ -23,18 +24,6 @@ export class User {
 
   @Column({ type: 'int' })
   user_id: number;
-
-  @Column({ type: 'text' })
-  name?: string;
-
-  @Column({ type: 'text', nullable: true })
-  image?: string;
-
-  @Column({
-    type: 'enum',
-    enum: UserType,
-  })
-  type: UserType;
 
   @CreateDateColumn()
   created_at: Date;

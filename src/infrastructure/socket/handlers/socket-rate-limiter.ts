@@ -12,13 +12,6 @@ export class SocketRateLimiter {
     return this.redisService.getClient();
   }
 
-  /**
-   * Check if user has exceeded rate limit
-   * @param userId User ID
-   * @param action Action name (e.g., 'send-message', 'typing')
-   * @param limit Max requests per window
-   * @param windowMs Time window in milliseconds
-   */
   async checkRateLimit(
     userId: number,
     action: string,
@@ -51,9 +44,6 @@ export class SocketRateLimiter {
     }
   }
 
-  /**
-   * Reset rate limit for a user/action
-   */
   async resetRateLimit(userId: number, action: string): Promise<void> {
     const key = `${this.RATE_LIMIT_PREFIX}${userId}:${action}`;
     await this.redis.del(key);

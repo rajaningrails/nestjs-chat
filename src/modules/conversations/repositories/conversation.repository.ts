@@ -40,6 +40,7 @@ export class ConversationRepository implements IConversationRepository {
           'last_message_sender_id',
           'last_message_receiver_id',
           'group_id',
+          'updated_at'
         ],
         ['id'],
       )
@@ -65,48 +66,6 @@ export class ConversationRepository implements IConversationRepository {
     return this.findById(id);
   }
 
-  async upsert(
-    convData: Partial<CreateConversationDto>,
-    manager?: EntityManager,
-  ): Promise<number> {
-    const repo = manager
-      ? manager.getRepository(Conversation)
-      : this.conversationRepository;
-
-    const existing = await repo.findOne({
-      where: {
-        school_id: convData.school_id!,
-        type: convData.type!,
-        group_id: convData.group_id!,
-      },
-    });
-
-    if (existing) {
-      return existing.id;
-    }
-
-    const result = await repo
-      .createQueryBuilder()
-      .insert()
-      .into(Conversation)
-      .values(convData)
-      .execute();
-
-    return result.identifiers[0].id;
-  }
-
-  async updateLastMessage(
-    conversationId: number,
-    data: Partial<Conversation>,
-    manager?: EntityManager,
-  ) {
-    const repo = manager
-      ? manager.getRepository(Conversation)
-      : this.conversationRepository;
-
-    await repo.update(conversationId, data);
-  }
-
   async checkIfConversationBetweenUserExists(
     user1Id: number,
     user2Id: number,
@@ -130,20 +89,15 @@ export class ConversationRepository implements IConversationRepository {
   async updateLastMessageSafe(data: {
     conversationId: number;
     messageId: number;
-    message: string | null;
-    sender_id: number;
-    receiver_id: number;
-    createdAt: Date;
+    updateAt: Date;
   }) {
-    const createdAt = toMySQLDate(data.createdAt);
+    const createdAt = toMySQLDate(data.updateAt);
     await this.conversationRepository
       .createQueryBuilder()
       .update(Conversation)
       .set({
         last_message_id: data.messageId as any,
-        last_message_sender_id: data.sender_id,
-        last_message_receiver_id: data.receiver_id,
-        updated_at: data.createdAt,
+        updated_at: data.updateAt,
       })
       .where('id = :id', { id: data.conversationId })
       .andWhere('(updated_at IS NULL OR updated_at <= :createdAt)', {
@@ -512,25 +466,6 @@ export class ConversationRepository implements IConversationRepository {
         totalItems: 0,
         totalRecords: 0,
       };
-    }
-  }
-
-  async cleanupOldDeletedConversations(daysOld: number = 90): Promise<number> {
-    try {
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - daysOld);
-
-      const result = await this.conversationRepository
-        .createQueryBuilder()
-        .delete()
-        .from(Conversation)
-        .where('deleted_at IS NOT NULL')
-        .andWhere('deleted_at < :cutoffDate', { cutoffDate })
-        .execute();
-
-      return result.affected || 0;
-    } catch (error) {
-      return 0;
     }
   }
 }

@@ -50,12 +50,11 @@ export class GroupRepository implements IGroupRepository {
     });
   }
 
-  async upsertMemberBatch(members: ChatGroupMember[]): Promise<void> {
+  async upsertMemberBatch(members: CreateChatGroupMemberDto[]): Promise<void> {
     if (!members.length) return;
     const values: CreateChatGroupMemberDto[] = members.map((m) => ({
       group_id: m.group_id,
       user_id: m.user_id,
-      id: m.id,
     }));
     await this.groupMemberRepo
       .createQueryBuilder()
@@ -81,14 +80,12 @@ export class GroupRepository implements IGroupRepository {
     return !!existingGroup;
   }
 
-  async create(data: CreateChatGroupDto): Promise<IRepositoryGroupResponse> {
+  async create(data: CreateChatGroupDto) {
     const {
       school_id,
       group_name,
       created_by,
       group_image,
-      studentDetails = [],
-      staffDetails = [],
     } = data;
 
     const group = this.groupRepo.create({
@@ -99,42 +96,17 @@ export class GroupRepository implements IGroupRepository {
     });
 
     const savedGroup = await this.groupRepo.save(group);
-    const groupId = savedGroup.id;
-
-    await this.groupMemberRepo.save({
-      group_id: groupId,
-      user_id: created_by,
-    });
-
-    if (studentDetails.length > 0) {
-      const studentMembers = studentDetails.map((s) => ({
-        group_id: groupId,
-        user_id: s.id,
-      }));
-      await this.groupMemberRepo.save(studentMembers);
-    }
-
-    if (staffDetails.length > 0) {
-      const staffMembers = staffDetails
-        .filter((s) => s.id !== created_by)
-        .map((s) => ({
-          group_id: groupId,
-          user_id: s.id,
-        }));
-      if (staffMembers.length > 0) {
-        await this.groupMemberRepo.save(staffMembers);
-      }
-    }
-
-    return { group_id: groupId };
+    return savedGroup;
   }
 
-  async groupMessageSeenBatch(payload: {
-    group_id: number;
-    user_id: number;
-    message_id: number;
-    conversation_id: number;
-  }[]) {
+  async groupMessageSeenBatch(
+    payload: {
+      group_id: number;
+      user_id: number;
+      message_id: number;
+      conversation_id: number;
+    }[],
+  ) {
     try {
       await this.groupMessageSeenRepo.save(payload);
     } catch (err) {

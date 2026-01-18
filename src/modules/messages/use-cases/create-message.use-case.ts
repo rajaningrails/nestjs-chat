@@ -1,27 +1,25 @@
 import { Injectable, Inject, BadRequestException } from '@nestjs/common';
-import { MessageService } from '../services/message.service';
 import { CreateMessageDto } from '../dto/create-message.dto';
 import { ConversationRepository } from 'src/modules/conversations/repositories/conversation.repository';
-import { ConversationService } from 'src/modules/conversations/services/conversation.service';
 import { ConversationType } from 'src/modules/conversations/dto/conversations.enum';
-import { UserService } from 'src/modules/users/services/user.service';
 import { CreateUserDto } from 'src/modules/users/dto/create-user.dto';
 import { profanity } from '@2toad/profanity';
 import { IConversationRepositoryToken } from 'src/modules/conversations/repositories/conversation.repository.interface';
 import { generateSafeNumericId } from 'src/utils/helpers';
+import { UserRepository } from 'src/modules/users/repositories/user.repository';
+import { MessageRepository } from '../repositories/message.repository';
 
 @Injectable()
 export class CreateMessageUseCase {
   constructor(
     @Inject(IConversationRepositoryToken)
     private readonly conversationRepository: ConversationRepository,
-    private readonly conversationService: ConversationService,
-    private readonly messageService: MessageService,
-    private readonly userService: UserService,
+    private readonly userRepository: UserRepository,
+    private readonly messageRepository: MessageRepository,
   ) {}
 
   async execute(request: CreateMessageDto) {
-    if(request.message && request.message.trim().length > 0) {      
+    if (request.message && request.message.trim().length > 0) {
       if (profanity.exists(request.message)) {
         throw new BadRequestException('Profanity not allowed');
       }
@@ -37,8 +35,7 @@ export class CreateMessageUseCase {
     if (existingConversation) {
       conversation_id = existingConversation.id;
     } else {
-      await this.conversationService.createConversation({
-        id: conversation_id,
+      await this.conversationRepository.save({
         school_id: request.school_id,
         type: ConversationType.USER,
         last_message_sender_id: request.sender_id,
@@ -46,7 +43,7 @@ export class CreateMessageUseCase {
         last_message_id: message_id,
       });
     }
-    await this.messageService.createMessage({
+    await this.messageRepository.save({
       id: message_id,
       conversation_id: conversation_id,
       sender_id: request.sender_id,
@@ -56,23 +53,17 @@ export class CreateMessageUseCase {
     });
     const payloadUsers: CreateUserDto[] = [
       {
-        id: generateSafeNumericId(),
         school_id: request.school_id,
-        name: request.sender_name,
-        image: request.sender_image,
         type: request.sender_user_type,
         user_id: request.sender_id,
       },
       {
-        id: generateSafeNumericId(),
         school_id: request.school_id,
-        name: request.receiver_name,
-        image: request.receiver_image,
         type: request.receiver_user_type,
         user_id: request.receiver_id,
       },
     ];
-    await this.userService.createUsers(payloadUsers);
+    await this.userRepository.createUsers(payloadUsers);
 
     return {
       id: message_id,

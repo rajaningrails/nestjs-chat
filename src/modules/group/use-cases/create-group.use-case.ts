@@ -1,15 +1,10 @@
 import { Injectable, ConflictException, Inject } from '@nestjs/common';
 import { IGroupRepositoryToken } from '../repositories/group.repository.interface';
-import {
-  ConversationType,
-  GroupType,
-} from 'src/modules/conversations/dto/conversations.enum';
+import { GroupType } from 'src/modules/conversations/dto/conversations.enum';
 import { GroupRepository } from '../repositories/group.repository';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
 import { CreateChatGroupDto } from '../dto/chat-group.dto';
 import { GroupService } from '../service/group.service';
-import { CreateChatGroupMemberDto } from '../dto/chat-group-member.dto';
-import { generateSafeNumericId } from 'src/utils/helpers';
 
 @Injectable()
 export class CreateGroupUseCase {
@@ -19,9 +14,7 @@ export class CreateGroupUseCase {
     private readonly groupService: GroupService,
   ) {}
 
-  async execute(
-    request: CreateChatGroupDto,
-  ): Promise<{ conversation_id: number; group_id: number }> {
+  async execute(request: CreateChatGroupDto) {
     const exists = await this.groupRepository.findGroupByName(
       request.group_name,
     );
@@ -42,11 +35,8 @@ export class CreateGroupUseCase {
     ];
     const users = allMembers?.map((p) => ({
       user_id: p.id,
-      name: p.name,
-      image: p.image ?? '',
       school_id: request.school_id,
       type: p.type,
-      id: generateSafeNumericId(),
     }));
 
     let group_type: GroupType = GroupType.STUDENTS_GROUP;
@@ -63,41 +53,16 @@ export class CreateGroupUseCase {
     ) {
       group_type = GroupType.TEACHERS_GROUP;
     }
-    const conversation_id = generateSafeNumericId();
-    const message_id = generateSafeNumericId();
-    const group_id = generateSafeNumericId();
-    request.id = group_id;
-
-    const members: CreateChatGroupMemberDto[] = allMembers.map((m) => ({
-      group_id: group_id,
-      id: generateSafeNumericId(),
-      user_id: m.id,
-    }));
-    await this.groupService.createGroup({
+    const groupResponse = await this.groupService.createGroup({
       users,
-      group_members: members,
-      conversation: {
-        id: conversation_id,
+      group: {
+        created_by: request.created_by,
+        group_image: request.group_image,
+        group_name: request.group_name,
         school_id: request.school_id,
-        type: ConversationType.GROUP,
-        group_id: request.id,
-        group_type,
-        last_message_sender_id: request.created_by,
-        last_message_id: message_id,
-      },
-      message: {
-        conversation_id,
-        id: message_id,
-        school_id: request.school_id,
-        sender_id: request.created_by,
-        group_id: group_id,
-        message: 'New group has been created',
       },
     });
 
-    return {
-      conversation_id,
-      group_id: request.id,
-    };
+    return groupResponse;
   }
 }

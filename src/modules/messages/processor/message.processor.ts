@@ -10,6 +10,9 @@ import { MessageProcessorConfig } from 'src/infrastructure/bullmq/size-queue.con
 import { Redis } from 'ioredis';
 import { MessageRepository } from '../repositories/message.repository';
 import { MessageDto } from '../dto/message.dto';
+import { SendMessageDto } from '../dto/send-message.dto';
+import { GroupRepository } from 'src/modules/group/repositories/group.repository';
+import { ConversationRepository } from 'src/modules/conversations/repositories/conversation.repository';
 
 @Processor(MessageProcessorConfig.queue_name, {
   concurrency: MessageProcessorConfig.no_of_jobs,
@@ -30,12 +33,16 @@ export class MessageProcessor
   private readonly DELETE_BUFFER_KEY = 'buffer:message:delete';
   private readonly UPDATE_BUFFER_KEY = 'buffer:message:update';
   private readonly USER_SEEN_BUFFER_KEY = 'buffer:message:user-seen';
+  private readonly GROUP_SEEN_BUFFER_KEY = 'buffer:group-message-seen:create';
+  private readonly CONVERSATION_UPDATE_BUFFER_KEY = 'buffer:conversation:update';
   
   // Lock keys
   private readonly CREATE_LOCK_KEY = 'lock:message:create:flush';
   private readonly UPDATE_LOCK_KEY = 'lock:message:update:flush';
   private readonly DELETE_LOCK_KEY = 'lock:message:delete:flush';
   private readonly USER_SEEN_LOCK_KEY = 'lock:message:user-seen:flush';
+  private readonly GROUP_SEEN_LOCK_KEY = 'lock:member:group-message-seen:flush';
+  private readonly CONVERSATION_UPDATE_LOCK_KEY = 'lock:conversation:update:flush';
   
   private readonly BATCH_SIZE = MessageProcessorConfig.batch_size || 100;
   private readonly FLUSH_INTERVAL = MessageProcessorConfig.batch_timeout ?? 5000;
@@ -48,6 +55,8 @@ export class MessageProcessor
   constructor(
     @InjectQueue(MessageProcessorConfig.queue_name) private messageQueue: Queue,
     private readonly messageRepository: MessageRepository,
+    private readonly groupRepository: GroupRepository,
+    private readonly conversationRepository: ConversationRepository,
   ) {
     super();
   }
@@ -59,21 +68,30 @@ export class MessageProcessor
       if (this.isShuttingDown) return;
       
       try {
-        const [createLen, updateLen, deleteLen, userSeenLen] = await Promise.all([
+        const [createLen, updateLen, deleteLen, userSeenLen, conversationUpdateLen] = await Promise.all([
           this.redis.llen(this.CREATE_BUFFER_KEY),
           this.redis.hlen(this.UPDATE_BUFFER_KEY),
           this.redis.scard(this.DELETE_BUFFER_KEY),
           this.redis.scard(this.USER_SEEN_BUFFER_KEY),
+          this.redis.hlen(this.CONVERSATION_UPDATE_BUFFER_KEY),
         ]);
 
         const flushPromises: Promise<void>[] = [];
+        
+        // CRITICAL: Flush messages BEFORE conversations to avoid FK constraint violations
         if (createLen > 0) flushPromises.push(this.flushCreateBuffer());
         if (updateLen > 0) flushPromises.push(this.flushUpdateBuffer());
         if (deleteLen > 0) flushPromises.push(this.flushDeleteBuffer());
         if (userSeenLen > 0) flushPromises.push(this.flushUserMessageSeen());
-
+        
+        // Wait for message operations to complete first
         if (flushPromises.length > 0) {
           await Promise.all(flushPromises);
+        }
+        
+        // Then flush conversation updates after messages are committed
+        if (conversationUpdateLen > 0) {
+          await this.flushConversationUpdateBuffer();
         }
       } catch (error) {
         this.logger.error('Periodic flush failed', error);
@@ -87,7 +105,6 @@ export class MessageProcessor
     const { name, data } = job;
     
     try {
-      // Validate data before processing
       if (!data) {
         throw new Error(`Job ${name} has no data`);
       }
@@ -101,6 +118,8 @@ export class MessageProcessor
           return await this.bufferDelete(data);
         case 'one-to-one-seen':
           return await this.bufferOneToOneSeen(data);
+        case 'group-message-seen':
+          return await this.bufferGroupSeen(data);
         default:
           throw new Error(`Unknown job type: ${name}`);
       }
@@ -111,20 +130,41 @@ export class MessageProcessor
   }
 
   private async bufferCreate(data: MessageDto) {
-    // Validation
     if (!data) {
       throw new Error('Message data is required for create');
     }
 
+    // Buffer the message
     await this.redis.lpush(this.CREATE_BUFFER_KEY, JSON.stringify(data));
+    
+    // Buffer conversation update if conversation_id exists
+    if (data.conversation_id) {
+      const conversationUpdate = {
+        id: data.conversation_id,
+        last_message_id: data.id,
+        last_message_sender_id: data.sender_id,
+        last_message_receiver_id: data.receiver_id,
+        updated_at: new Date(),
+      };
+      
+      await this.redis.hset(
+        this.CONVERSATION_UPDATE_BUFFER_KEY,
+        data.conversation_id.toString(),
+        JSON.stringify(conversationUpdate),
+      );
+    }
+    
     const count = await this.redis.llen(this.CREATE_BUFFER_KEY);
     
     if (count >= this.BATCH_SIZE) {
-      // Use setImmediate to avoid blocking
-      setImmediate(() => {
-        this.flushCreateBuffer().catch((err) =>
-          this.logger.error('Async flush failed', err),
-        );
+      setImmediate(async () => {
+        try {
+          // CRITICAL: Flush messages first, then conversations
+          await this.flushCreateBuffer();
+          await this.flushConversationUpdateBuffer();
+        } catch (err) {
+          this.logger.error('Async flush failed', err);
+        }
       });
     }
     
@@ -193,6 +233,57 @@ export class MessageProcessor
     return { success: true, buffered: true, operation: 'one-to-one-seen' };
   }
 
+  private async bufferGroupSeen(data: SendMessageDto) {
+    await this.redis.lpush(this.GROUP_SEEN_BUFFER_KEY, JSON.stringify(data));
+
+    const count = await this.redis.llen(this.GROUP_SEEN_BUFFER_KEY);
+
+    if (count >= this.BATCH_SIZE) {
+      this.flushGroupMessageSeen().catch((err) =>
+        this.logger.error('Async flush failed', err),
+      );
+    }
+
+    return { success: true, buffered: true, operation: 'group-seen' };
+  }
+
+  private async flushGroupMessageSeen() {
+    const lockAcquired = await this.redis.set(
+      this.GROUP_SEEN_LOCK_KEY,
+      Date.now().toString(),
+      'PX',
+      this.LOCK_TTL,
+      'NX',
+    );
+
+    if (!lockAcquired) {
+      return;
+    }
+
+    try {
+      const result = await this.redis
+        .multi()
+        .lrange(this.GROUP_SEEN_BUFFER_KEY, 0, -1)
+        .del(this.GROUP_SEEN_BUFFER_KEY)
+        .exec();
+
+      const rawData = result?.[0]?.[1] as string[];
+
+      if (!rawData || rawData.length === 0) {
+        return;
+      }
+
+      const batch = rawData.map((item) => JSON.parse(item));
+      try {
+        await this.groupRepository.groupMessageSeenBatch(batch);
+      } catch (error) {
+        await this.moveToDLQ('group-seen', batch, error);
+      }
+    } finally {
+      await this.redis.del(this.GROUP_SEEN_LOCK_KEY);
+    }
+  }
+
   private async flushCreateBuffer() {
     const lockAcquired = await this.redis.set(
       this.CREATE_LOCK_KEY,
@@ -224,7 +315,6 @@ export class MessageProcessor
 
       this.logger.log(`Flushing ${rawData.length} create operations`);
 
-      // Extend lock if needed for large batches
       if (rawData.length > this.BATCH_SIZE * 2) {
         await this.extendLock(this.CREATE_LOCK_KEY, this.LOCK_TTL);
       }
@@ -248,6 +338,9 @@ export class MessageProcessor
       } catch (error) {
         this.logger.error('Create batch upsert failed, moving to DLQ', error);
         await this.moveToDLQ('create', batch, error);
+        
+        // If messages failed, clear conversation updates to prevent FK violations
+        await this.clearRelatedConversationUpdates(batch);
       }
     } catch (error) {
       this.logger.error('Create flush operation failed', error);
@@ -421,7 +514,92 @@ export class MessageProcessor
     }
   }
 
-  // ADDED: Lock extension helper
+  /**
+   * CRITICAL: This must be called AFTER messages are successfully committed
+   * to avoid FK constraint violations on last_message_id
+   */
+  private async flushConversationUpdateBuffer() {
+    const lockAcquired = await this.redis.set(
+      this.CONVERSATION_UPDATE_LOCK_KEY,
+      Date.now().toString(),
+      'PX',
+      this.LOCK_TTL,
+      'NX',
+    );
+
+    if (!lockAcquired) {
+      this.logger.debug('Conversation update flush already in progress, skipping');
+      return;
+    }
+
+    const startTime = Date.now();
+
+    try {
+      const result = await this.redis
+        .multi()
+        .hgetall(this.CONVERSATION_UPDATE_BUFFER_KEY)
+        .del(this.CONVERSATION_UPDATE_BUFFER_KEY)
+        .exec();
+
+      const hashData = result?.[0]?.[1] as Record<string, string>;
+      
+      if (!hashData || Object.keys(hashData).length === 0) {
+        return;
+      }
+
+      const dataCount = Object.keys(hashData).length;
+      this.logger.log(`Flushing ${dataCount} conversation update operations`);
+
+      if (dataCount > this.BATCH_SIZE * 2) {
+        await this.extendLock(this.CONVERSATION_UPDATE_LOCK_KEY, this.LOCK_TTL);
+      }
+
+      const batch = Object.values(hashData).map((item) => {
+        try {
+          return JSON.parse(item);
+        } catch (error) {
+          this.logger.error('Failed to parse conversation update data', { item, error });
+          return null;
+        }
+      }).filter(Boolean);
+
+      if (batch.length === 0) {
+        return;
+      }
+
+      try {
+        await this.conversationRepository.upsertBatch(batch);
+        this.logger.log(`Successfully flushed ${batch.length} conversation updates in ${Date.now() - startTime}ms`);
+      } catch (error) {
+        this.logger.error('Conversation update batch failed, moving to DLQ', error);
+        await this.moveToDLQ('conversation-update', batch, error);
+      }
+    } catch (error) {
+      this.logger.error('Conversation update flush operation failed', error);
+      throw error;
+    } finally {
+      await this.redis.del(this.CONVERSATION_UPDATE_LOCK_KEY);
+    }
+  }
+
+  /**
+   * Clear conversation updates for failed message batches to prevent FK violations
+   */
+  private async clearRelatedConversationUpdates(failedMessages: MessageDto[]) {
+    try {
+      const conversationIds = failedMessages
+        .map(msg => msg.conversation_id?.toString())
+        .filter(Boolean);
+      
+      if (conversationIds.length > 0) {
+        await this.redis.hdel(this.CONVERSATION_UPDATE_BUFFER_KEY, ...conversationIds);
+        this.logger.warn(`Cleared ${conversationIds.length} conversation updates due to message flush failure`);
+      }
+    } catch (error) {
+      this.logger.error('Failed to clear conversation updates', error);
+    }
+  }
+
   private async extendLock(lockKey: string, ttl: number): Promise<void> {
     try {
       await this.redis.pexpire(lockKey, ttl);
@@ -432,7 +610,7 @@ export class MessageProcessor
   }
 
   private async moveToDLQ(
-    operation: 'create' | 'update' | 'delete' | 'one-to-one-seen' | 'group-seen',
+    operation: 'create' | 'update' | 'delete' | 'one-to-one-seen' | 'group-seen' | 'conversation-update',
     data: any[],
     error: any,
   ) {
@@ -448,8 +626,6 @@ export class MessageProcessor
       };
       
       await this.redis.lpush(dlqKey, JSON.stringify(entry));
-      
-      // Keep only last 1000 DLQ entries per operation to prevent memory issues
       await this.redis.ltrim(dlqKey, 0, 999);
       
       this.logger.warn(`Moved ${data.length} items to DLQ: ${dlqKey}`);
@@ -469,12 +645,17 @@ export class MessageProcessor
     this.logger.log('Flushing all buffers before shutdown...');
     
     try {
+      // CRITICAL: Flush messages first, then conversations
       await Promise.all([
         this.flushCreateBuffer(),
         this.flushUpdateBuffer(),
         this.flushDeleteBuffer(),
         this.flushUserMessageSeen(),
       ]);
+      
+      // Then flush conversation updates after messages are committed
+      await this.flushConversationUpdateBuffer();
+      
       this.logger.log('All buffers flushed successfully');
     } catch (error) {
       this.logger.error('Error during final flush', error);

@@ -64,7 +64,6 @@ export class CreateMessageDto {
   @IsNotEmpty()
   receiver_image: string;
 
-
   @IsDate()
   @IsOptional()
   delivered_at?: Date

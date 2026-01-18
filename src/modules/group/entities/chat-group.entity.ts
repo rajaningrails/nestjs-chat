@@ -9,7 +9,6 @@ import {
   JoinColumn,
   Index,
   DeleteDateColumn,
-  PrimaryColumn,
 } from 'typeorm';
 import { ChatGroupMember } from './chat-group-member.entity';
 import { GroupMessageSeen } from './chat-group-message-seen.entity';
@@ -21,12 +20,12 @@ import { Conversation } from 'src/modules/conversations/entities/conversation.en
 @Index('idx_school_id', ['school_id'])
 @Index('idx_created_by', ['created_by'])
 export class ChatGroup {
-  @PrimaryColumn({ type: 'bigint', unsigned: true })
+  @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ type: 'int', nullable: true })
   school_id?: number;
-
+  
   @Column({ type: 'varchar', length: 400 })
   group_name: string;
 

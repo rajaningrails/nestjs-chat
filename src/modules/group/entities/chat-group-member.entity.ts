@@ -7,13 +7,14 @@ import {
   JoinColumn,
   Index,
   PrimaryColumn,
+  PrimaryGeneratedColumn,
 } from 'typeorm';
 import { ChatGroup } from './chat-group.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 @Entity('chat_group_members')
 @Index(['group_id', 'user_id'], { unique: true })
 export class ChatGroupMember {
-  @PrimaryColumn({ type: 'bigint', unsigned: true })
+  @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ type: 'bigint', unsigned: true })

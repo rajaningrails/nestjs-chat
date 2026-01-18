@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Message } from '../entities/message.entity';
 import { IMessageRepository } from './message.repository.interface';
-import { CreateMessageDto } from '../dto/create-message.dto';
+import { SendMessageDto } from '../dto/send-message.dto';
 
 @Injectable()
 export class MessageRepository implements IMessageRepository {
@@ -43,7 +43,7 @@ export class MessageRepository implements IMessageRepository {
     });
   }
 
-  async save(messageData: Partial<CreateMessageDto>): Promise<Message> {
+  async save(messageData: Partial<SendMessageDto>): Promise<Message> {
     const message = this.messageRepository.create(messageData);
     return this.messageRepository.save(message);
   }

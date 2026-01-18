@@ -7,9 +7,6 @@ import { Public } from 'src/common/decorators/public.decorator';
 export class HealthController {
   constructor(
     @InjectQueue('messages') private messageQueue: Queue,
-    @InjectQueue('conversations') private conversationQueue: Queue,
-    @InjectQueue('users') private userQueue: Queue,
-    @InjectQueue('groups') private groupQueue: Queue,
   ) {}
 
   @Get()
@@ -33,9 +30,6 @@ export class HealthController {
   async checkQueues() {
     const queues = [
       { name: 'messages', queue: this.messageQueue },
-      { name: 'conversations', queue: this.conversationQueue },
-      { name: 'users', queue: this.userQueue },
-      { name: 'groups', queue: this.groupQueue },
     ];
 
     const status = await Promise.all(

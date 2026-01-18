@@ -17,7 +17,7 @@ import { Message } from 'src/modules/messages/entities/message.entity';
 @Entity('group_message_seen')
 @Index(['conversation_id', 'message_id', 'user_id'], { unique: true })
 export class GroupMessageSeen {
-  @PrimaryColumn({ type: 'bigint', unsigned: true })
+  @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ type: 'bigint', unsigned: true })

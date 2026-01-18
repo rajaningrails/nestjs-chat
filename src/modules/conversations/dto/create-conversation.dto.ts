@@ -9,10 +9,6 @@ import {
 import { ConversationType, GroupType } from './conversations.enum';
 
 export class CreateConversationDto {
-  @IsNumber()
-  @IsNotEmpty()
-  id: number;
-  
   @IsInt()
   @IsNotEmpty()
   school_id: number;

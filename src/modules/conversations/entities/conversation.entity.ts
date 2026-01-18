@@ -10,7 +10,7 @@ import {
   PrimaryColumn,
   DeleteDateColumn,
 } from 'typeorm';
-import { ConversationType } from '../dto/conversations.enum';
+import { ConversationType, GroupType } from '../dto/conversations.enum';
 import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
 import { Message } from 'src/modules/messages/entities/message.entity';
 import { GroupMessageSeen } from 'src/modules/group/entities/chat-group-message-seen.entity';
@@ -34,6 +34,9 @@ export class Conversation {
 
   @Column({ type: 'enum', enum: ConversationType })
   type: ConversationType;
+
+  @Column({ type: 'enum', enum: GroupType, nullable: true })
+  group_type: GroupType;
 
   @Column({ type: 'bigint', unsigned: true, nullable: true })
   last_message_id?: number;

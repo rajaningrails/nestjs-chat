@@ -39,7 +39,7 @@ export interface IGroupRepository {
     school_id,
     staffDetails,
     studentDetails,
-  }: UpdateGroupDto): Promise<IRepositoryGroupResponse>;
+  }: UpdateGroupDto);
 
   create({
     created_by,
@@ -48,7 +48,7 @@ export interface IGroupRepository {
     school_id,
     staffDetails,
     studentDetails,
-  }: CreateChatGroupDto): Promise<IRepositoryGroupResponse>;
+  }: CreateChatGroupDto);
 
   getGroupNamesByUserId(
     school_id: number,

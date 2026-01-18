@@ -30,22 +30,17 @@ export class GroupController {
   ) {}
 
   @Post('create')
-  async create(@Body() createGroupDto: CreateChatGroupDto): Promise<IResponse> {
+  async create(@Body() createGroupDto: CreateChatGroupDto) {
     const result = await this.createGroupUseCase.execute(createGroupDto);
-    return {
-      conversation_id: result.conversation_id,
-      group_id: result.group_id,
-    };
+    return result;
   }
 
   @Post('update')
   async update(
     @Body() updateGroupDto: UpdateGroupDto,
-  ): Promise<Partial<IResponse>> {
+  ) {
     const result = await this.updateGroupUseCase.execute(updateGroupDto);
-    return {
-      group_id: result.group_id,
-    };
+    return result;
   }
 
   @Get('getGroupNamesByUserId')

@@ -10,7 +10,6 @@ import { MessageModule } from '../messages/message.module';
 import { UsersModule } from '../users/users.module';
 import { IGroupRepositoryToken } from './repositories/group.repository.interface';
 import { UpdateGroupUseCase } from './use-cases/update-group.use-case';
-import { groupQueueConfig } from 'src/infrastructure/bullmq';
 import { GroupService } from './service/group.service';
 import { GroupMessageSeen } from './entities/chat-group-message-seen.entity';
 
@@ -20,7 +19,6 @@ import { GroupMessageSeen } from './entities/chat-group-message-seen.entity';
     ConversationsModule,
     MessageModule,
     UsersModule,
-    groupQueueConfig,
   ],
   controllers: [GroupController],
   providers: [

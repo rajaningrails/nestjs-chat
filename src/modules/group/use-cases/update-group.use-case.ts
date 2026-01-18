@@ -1,23 +1,18 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { IGroupRepositoryToken } from '../repositories/group.repository.interface';
-import {
-  GroupType,
-} from 'src/modules/conversations/dto/conversations.enum';
+import { GroupType } from 'src/modules/conversations/dto/conversations.enum';
 import { GroupRepository } from '../repositories/group.repository';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
 import { PartialCreateUserDto, UpdateGroupDto } from '../dto/chat-group.dto';
-import { UserService } from 'src/modules/users/services/user.service';
 import { GroupService } from '../service/group.service';
 import { UserRepository } from 'src/modules/users/repositories/user.repository';
 import { CreateUserDto } from 'src/modules/users/dto/create-user.dto';
-import { generateSafeNumericId } from 'src/utils/helpers';
 
 @Injectable()
 export class UpdateGroupUseCase {
   constructor(
     @Inject(IGroupRepositoryToken)
     private readonly groupRepository: GroupRepository,
-    private readonly userService: UserService,
     private readonly groupService: GroupService,
     private readonly userRepository: UserRepository,
   ) {}
@@ -35,18 +30,13 @@ export class UpdateGroupUseCase {
     if (missingUsers.length > 0) {
       const usersToCreate: CreateUserDto[] = missingUsers.map((m) => ({
         user_id: m.id,
-        name: m.name,
-        image: m.image ?? null,
         school_id: school_id,
         type: m.type,
-        id: generateSafeNumericId(),
       }));
-      await this.userService.createUsers(usersToCreate);
+      await this.userRepository.createUsers(usersToCreate);
     }
   }
-  async execute(
-    request: UpdateGroupDto,
-  ): Promise<{ conversation_id: number; group_id: number }> {
+  async execute(request: UpdateGroupDto) {
     const exists = await this.groupRepository.findById(request.group_id!);
     if (!exists) {
       throw new NotFoundException('Group does not exists');
@@ -80,16 +70,16 @@ export class UpdateGroupUseCase {
     ) {
       group_type = GroupType.TEACHERS_GROUP;
     }
-    await this.groupService.updateGroup(request);
-    const members = allMembers.map((m) => ({
-      group_id: request.group_id,
-      user_id: m.id,
-      id: generateSafeNumericId(),
-    }))
-    await this.groupService.updateGroupMembers(members)
-    return {
-      conversation_id: exists.conversations[0].id,
-      group_id: request.group_id,
-    };
+    const response = await this.groupService.updateGroup({
+      users: allMembers,
+      group: {
+        created_by: request.created_by,
+        group_image: request.group_image,
+        group_name: request.group_name,
+        school_id: request.school_id,
+        group_id: request.group_id,
+      },
+    });
+    return response;
   }
 }

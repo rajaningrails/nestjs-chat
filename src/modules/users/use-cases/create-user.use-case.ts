@@ -3,14 +3,12 @@ import { User } from '../entities/user.entity';
 import { CreateUserDto } from '../dto/create-user.dto';
 import type { IUserRepository } from '../repositories/user.repository.interface';
 import { IUserRepositoryToken } from '../repositories/user.repository.interface';
-import { UserService } from '../services/user.service';
 
 @Injectable()
 export class CreateUserUseCase {
   constructor(
     @Inject(IUserRepositoryToken)
-    private readonly userRepository: IUserRepository,
-    private readonly userService: UserService) {}
+    private readonly userRepository: IUserRepository) {}
 
   async execute(request: CreateUserDto): Promise<User> {
 
@@ -19,6 +17,6 @@ export class CreateUserUseCase {
       throw new ConflictException('User already exists');
     }
 
-    return this.userService.createUser(request);
+    return this.userRepository.create(request);
   }
 }

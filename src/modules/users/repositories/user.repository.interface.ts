@@ -7,5 +7,5 @@ export interface IUserRepository {
   findAll(): Promise<User[]>;
   findByUserId(user_id:number): Promise<User | null>;
   create(userData: CreateUserDto): Promise<User>;
-  update(user_id: number, userData: UpdateUserDto): Promise<User | null>;
+  update(userData: UpdateUserDto): Promise<User | null>;
 }

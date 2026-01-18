@@ -1,4 +1,3 @@
-import { PartialType } from '@nestjs/mapped-types';
 import { Type } from 'class-transformer';
 import { IsArray, IsEmail, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
@@ -26,10 +25,6 @@ export class PartialCreateUserDto{
 }
 
 export class CreateChatGroupDto {
-  @IsNumber()
-  @IsOptional()
-  id: number;
-
   @IsInt()
   @IsNotEmpty({ message: 'school_id is required' })
   school_id: number;

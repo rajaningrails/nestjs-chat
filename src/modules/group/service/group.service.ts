@@ -10,18 +10,21 @@ import { ConversationRepository } from 'src/modules/conversations/repositories/c
 import { ConversationType } from 'src/modules/conversations/dto/conversations.enum';
 import { MessageRepository } from 'src/modules/messages/repositories/message.repository';
 import { generateSafeNumericId } from 'src/utils/helpers';
+import { UserRepository } from 'src/modules/users/repositories/user.repository';
 @Injectable()
 export class GroupService {
   constructor(
     private readonly groupRepository: GroupRepository,
     private readonly conversationRepository: ConversationRepository,
     private readonly messageRepository: MessageRepository,
+    private readonly userRepository: UserRepository
   ) {}
 
   async createGroup(payload: {
     users: CreateUserDto[];
     group: CreateChatGroupDto;
   }) {
+    const userResponse = await this.userRepository.createUsers(payload.users);
     const groupResponse = await this.groupRepository.create(payload.group);
     const { id: conversation_id } = await this.conversationRepository.save({
       school_id: payload.group.school_id,

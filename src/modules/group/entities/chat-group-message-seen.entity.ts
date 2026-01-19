@@ -20,13 +20,13 @@ export class GroupMessageSeen {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'bigint', unsigned: true })
+  @Column({ type: 'int' })
   conversation_id: number;
 
   @Column({ type: 'bigint', unsigned: true })
   message_id: number;
 
-  @Column({ type: 'bigint', unsigned: true })
+  @Column({ type: 'int' })
   group_id: number;
 
   @Column({ type: 'int' })

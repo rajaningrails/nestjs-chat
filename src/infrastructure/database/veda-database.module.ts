@@ -1,28 +1,28 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
+@Global()
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
+      name: 'veda-database',
+      useFactory: (config: ConfigService) => ({
         type: 'mysql',
-        name: 'veda-database',
-        host: configService.get<string>('veda-database.host'),
-        port: configService.get<number>('veda-database.port') || 3306,
-        username: configService.get<string>('veda-database.username'),
-        password: configService.get<string>('veda-database.password'),
-        database: configService.get<string>('veda-database.database'),
-        synchronize: configService.get<boolean>('veda-database.synchronize'),
-        entities:[],
-        logging: configService.get<boolean>('veda-database.logging'),
-        extra: {
-          options: '-c default_transaction_read_only=on',
-        },
+        host: config.get('veda-database.host'),
+        port: config.get<number>('veda-database.port'),
+        username: config.get('veda-database.username'),
+        password: config.get('veda-database.password'),
+        database: config.get('veda-database.database'),
+
+        synchronize: false,
+        logging: false,
+        entities: [], // ✅ no entities = no schema sync
       }),
     }),
   ],
+  exports: [TypeOrmModule], // 🔥 THIS WAS REQUIRED
 })
-export class DatabaseModule {}
+export class VedaDatabaseModule {}

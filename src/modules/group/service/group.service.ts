@@ -69,4 +69,15 @@ export class GroupService {
       ...groupResponse,
     };
   }
+
+  async groupMessageSeenBatch(
+    payload: {
+      group_id: number;
+      user_id: number;
+      message_id: number;
+      conversation_id: number;
+    }[],
+  ) {
+    return await this.groupRepository.groupMessageSeenBatch(payload);
+  }
 }

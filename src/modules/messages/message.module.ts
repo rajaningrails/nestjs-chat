@@ -9,20 +9,22 @@ import { MessageProcessor } from './processor/message.processor';
 import { User } from '../users/entities/user.entity';
 import { Conversation } from '../conversations/entities/conversation.entity';
 import { messageQueueConfig } from 'src/infrastructure/bullmq';
-import { ConversationsModule } from '../conversations/conversation.module';
 import { UsersModule } from '../users/users.module';
 import { MessageGateway } from './gateway/message.gateway';
 import { SendMessageUseCase } from './use-cases/send-message.use-case';
 import { CreateMessageUseCase } from './use-cases/create-message.use-case';
 import { DeleteMessageUseCase } from './use-cases/delete-message.use-case';
 import { MessageSeenUseCase } from './use-cases/message-seen.use-case';
+import { GroupModule } from '../group/group.module';
+import { ConversationsModule } from '../conversations/conversations.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Message,User,Conversation]),
+    TypeOrmModule.forFeature([Message, User, Conversation]),
     messageQueueConfig,
-    forwardRef(() => ConversationsModule),
-    UsersModule    
+    forwardRef(() => ConversationsModule), // Already has forwardRef - good!
+    forwardRef(() => GroupModule), // Already has forwardRef - good!
+    UsersModule
   ],
   controllers: [MessageController],
   providers: [
@@ -37,7 +39,7 @@ import { MessageSeenUseCase } from './use-cases/message-seen.use-case';
     SendMessageUseCase,
     CreateMessageUseCase,
     DeleteMessageUseCase,
-    MessageSeenUseCase
+    MessageSeenUseCase,
   ],
   exports: [IMessageRepositoryToken, MessageRepository, MessageService],
 })

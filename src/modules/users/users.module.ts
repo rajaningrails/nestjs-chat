@@ -24,7 +24,7 @@ import { UsersService } from './services/users.service';
     UsersService,
     UserRepository
   ],
-  exports: [IUserRepositoryToken, CreateUserUseCase, UserRepository],
+  exports: [IUserRepositoryToken, CreateUserUseCase, UserRepository,UsersService],
 })
 
 export class UsersModule { }

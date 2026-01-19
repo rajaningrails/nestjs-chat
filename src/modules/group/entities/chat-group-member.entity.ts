@@ -17,7 +17,7 @@ export class ChatGroupMember {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'bigint', unsigned: true })
+  @Column({ type: 'int' })
   group_id: number;
 
   @Column({ type: 'int' })

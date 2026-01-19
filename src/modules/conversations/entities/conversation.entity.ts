@@ -9,6 +9,7 @@ import {
   OneToMany,
   PrimaryColumn,
   DeleteDateColumn,
+  PrimaryGeneratedColumn,
 } from 'typeorm';
 import { ConversationType, GroupType } from '../dto/conversations.enum';
 import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
@@ -23,13 +24,13 @@ import { GroupMessageSeen } from 'src/modules/group/entities/chat-group-message-
 @Index('idx_participants', ['school_id', 'type'])
 @Index('idx_updated_at', ['updated_at'])
 export class Conversation {
-  @PrimaryColumn({ type: 'bigint', unsigned: true })
+  @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ type: 'int' })
   school_id: number;
 
-  @Column({ type: 'bigint', unsigned: true, nullable: true })
+  @Column({ type: 'int', nullable: true })
   group_id?: number;
 
   @Column({ type: 'enum', enum: ConversationType })

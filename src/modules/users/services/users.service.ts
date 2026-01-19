@@ -6,14 +6,14 @@ import { DataSource } from 'typeorm';
 export class UsersService {
   constructor(
     @InjectDataSource('veda-database')
-    private readonly readOnlyDb: DataSource,
+    private readonly vedaDb: DataSource,
   ) {}
 
-  async findUserById(id: number): Promise<any> {
-    const query = `
-      SELECT * FROM "user" WHERE id = $1
-    `;
-    const result = await this.readOnlyDb.query(query, [id]);
-    return result[0] || null;
+  async findUserById(id: number) {
+    const [user] = await this.vedaDb.query(
+      'SELECT * FROM user WHERE id = ?',
+      [id],
+    );
+    return user ?? null;
   }
 }

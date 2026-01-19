@@ -26,7 +26,7 @@ export class Message {
   @PrimaryColumn({ type: 'bigint', unsigned: true })
   id: number;
 
-  @Column({ type: 'bigint', unsigned: true })
+  @Column({ type: 'int' })
   conversation_id: number;
 
   @Column({ type: 'int' })
@@ -38,7 +38,7 @@ export class Message {
   @Column({ type: 'int', nullable: true })
   receiver_id?: number;
 
-  @Column({ type: 'bigint', unsigned: true, nullable: true })
+  @Column({ type: 'int', nullable: true })
   group_id?: number;
 
   @Column({ type: 'text', charset: 'utf8mb4', nullable: true })

@@ -6,17 +6,15 @@ import {
 } from '@nestjs/common';
 import { MessageService } from '../services/message.service';
 import { MessageDto } from '../dto/message.dto';
-import { ConversationRepository } from 'src/modules/conversations/repositories/conversation.repository';
 import { profanity } from '@2toad/profanity';
-import { IConversationRepositoryToken } from 'src/modules/conversations/repositories/conversation.repository.interface';
 import { generateSafeNumericId } from 'src/utils/helpers';
 import { UsersService } from 'src/modules/users/services/users.service';
+import { ConversationService } from 'src/modules/conversations/services/conversation.service';
 
 @Injectable()
 export class SendMessageUseCase {
   constructor(
-    @Inject(IConversationRepositoryToken)
-    private readonly conversationRepository: ConversationRepository,
+    private readonly conversationService: ConversationService,
     private readonly userService: UsersService,
     private readonly messagesService: MessageService,
   ) {}
@@ -27,7 +25,7 @@ export class SendMessageUseCase {
         throw new BadRequestException('Profanity not allowed');
       }
     }
-    const existingConversation = await this.conversationRepository.findById(
+    const existingConversation = await this.conversationService.findById(
       request.conversation_id,
     );
     if (!existingConversation) {

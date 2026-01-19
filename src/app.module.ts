@@ -6,7 +6,7 @@ import { databaseConfig } from './infrastructure/config/database.config';
 import { CommonModule } from './common/common.module';
 import { loggerConfig } from './infrastructure/config/logger.config';
 import { UsersModule } from './modules/users/users.module';
-import { ConversationsModule } from './modules/conversations/conversation.module';
+import { ConversationsModule } from './modules/conversations/conversations.module';
 import { MessageModule } from './modules/messages/message.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
 import { QueueModule } from './infrastructure/queue/queue.module';
@@ -18,13 +18,15 @@ import { ThrottleModule } from './common/throttler/throttler.module';
 import { TasksModule } from './infrastructure/job/task.module';
 import { GroupModule } from './modules/group/group.module';
 import { DLQModule } from './modules/dlq/dlq.module';
+import { vedaDatabaseConfig } from './infrastructure/config/veda-database.config';
+import { VedaDatabaseModule } from './infrastructure/database/veda-database.module';
 
 @Module({
   imports: [
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig],
+      load: [databaseConfig,vedaDatabaseConfig],
       envFilePath: '.env',
     }),
 
@@ -33,6 +35,7 @@ import { DLQModule } from './modules/dlq/dlq.module';
 
     // Database
     DatabaseModule,
+    VedaDatabaseModule,
 
     // Common utilities
     SocketModule,

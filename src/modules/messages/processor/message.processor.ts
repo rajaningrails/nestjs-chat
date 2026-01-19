@@ -11,8 +11,8 @@ import { Redis } from 'ioredis';
 import { MessageRepository } from '../repositories/message.repository';
 import { MessageDto } from '../dto/message.dto';
 import { SendMessageDto } from '../dto/send-message.dto';
-import { GroupRepository } from 'src/modules/group/repositories/group.repository';
-import { ConversationRepository } from 'src/modules/conversations/repositories/conversation.repository';
+import { GroupService } from 'src/modules/group/service/group.service';
+import { ConversationService } from 'src/modules/conversations/services/conversation.service';
 
 @Processor(MessageProcessorConfig.queue_name, {
   concurrency: MessageProcessorConfig.no_of_jobs,
@@ -55,8 +55,8 @@ export class MessageProcessor
   constructor(
     @InjectQueue(MessageProcessorConfig.queue_name) private messageQueue: Queue,
     private readonly messageRepository: MessageRepository,
-    private readonly groupRepository: GroupRepository,
-    private readonly conversationRepository: ConversationRepository,
+    private readonly groupService: GroupService,
+    private readonly conversationService: ConversationService,
   ) {
     super();
   }
@@ -275,7 +275,7 @@ export class MessageProcessor
 
       const batch = rawData.map((item) => JSON.parse(item));
       try {
-        await this.groupRepository.groupMessageSeenBatch(batch);
+        await this.groupService.groupMessageSeenBatch(batch);
       } catch (error) {
         await this.moveToDLQ('group-seen', batch, error);
       }
@@ -568,7 +568,7 @@ export class MessageProcessor
       }
 
       try {
-        await this.conversationRepository.upsertBatch(batch);
+        await this.conversationService.upsertBatch(batch);
         this.logger.log(`Successfully flushed ${batch.length} conversation updates in ${Date.now() - startTime}ms`);
       } catch (error) {
         this.logger.error('Conversation update batch failed, moving to DLQ', error);

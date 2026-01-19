@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConversationRepository } from '../repositories/conversation.repository';
 import { DataSource } from 'typeorm';
+import { Conversation } from '../entities/conversation.entity';
 
 @Injectable()
 export class ConversationService {
@@ -58,5 +59,13 @@ export class ConversationService {
       );
       throw error;
     }
+  }
+
+  async upsertBatch(conversations: Conversation[]){
+    return this.conversationRepository.upsertBatch(conversations);
+  }
+
+  async findById(id: number): Promise<Conversation | null> {
+    return this.conversationRepository.findById(id);
   }
 }

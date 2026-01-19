@@ -61,6 +61,7 @@ export class CreateGroupUseCase {
         group_name: request.group_name,
         school_id: request.school_id,
       },
+      group_type
     });
 
     return groupResponse;

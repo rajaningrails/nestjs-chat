@@ -28,7 +28,7 @@ export class GroupService {
     group: CreateChatGroupDto;
     group_type: GroupType;
   }) {
-    await this.userRepository.createUsers(payload.users);
+    await this.userRepository.upsertUsers(payload.users);
     const groupResponse = await this.groupRepository.create(payload.group);
     const message_id = generateSafeNumericId();
     const { id: conversation_id } = await this.conversationRepository.save({
@@ -67,6 +67,7 @@ export class GroupService {
     group: UpdateGroupDto;
   }) {
     const groupResponse = await this.groupRepository.update(payload.group);
+    await this.groupRepository.removeMembers(groupResponse?.group_id);
     await this.groupRepository.upsertMemberBatch(
       payload.users?.map((m) => ({
         group_id: groupResponse?.group_id,

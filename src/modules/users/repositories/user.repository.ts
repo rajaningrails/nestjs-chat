@@ -31,10 +31,22 @@ export class UserRepository implements IUserRepository {
     return this.findByUserId(userData.user_id);
   }
 
-  async createUsers(users: CreateUserDto[]): Promise<User[]> {
-    return this.userRepository.save(users);
+  async upsertUsers(users: CreateUserDto[]): Promise<void> {
+    if (!users.length) return;
+  
+    await this.userRepository
+      .createQueryBuilder()
+      .insert()
+      .into(User)
+      .values(users)
+      .orUpdate(
+        ['school_id', 'type'],   
+        ['user_id'],             
+      )
+      .updateEntity(false)       
+      .execute();
   }
-
+  
   async findByUserIds(userIds: number[]): Promise<User[]> {
     return this.userRepository.find({
       where: {

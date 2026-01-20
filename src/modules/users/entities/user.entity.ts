@@ -6,7 +6,6 @@ import {
   Unique,
   Index,
   OneToMany,
-  PrimaryColumn,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { UserType } from '../dto/user-type.enum';
@@ -25,6 +24,9 @@ export class User {
   @Column({ type: 'int', unique: true })
   user_id: number;
 
+  @Column({type: 'enum', enum: UserType})
+  type: UserType;
+  
   @CreateDateColumn()
   created_at: Date;
 

@@ -63,7 +63,7 @@ export class CreateMessageUseCase {
         user_id: request.receiver_id,
       },
     ];
-    await this.userRepository.createUsers(payloadUsers);
+    await this.userRepository.upsertUsers(payloadUsers);
 
     return {
       id: message_id,

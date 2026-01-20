@@ -33,7 +33,7 @@ export class UpdateGroupUseCase {
         school_id: school_id,
         type: m.type,
       }));
-      await this.userRepository.createUsers(usersToCreate);
+      await this.userRepository.upsertUsers(usersToCreate);
     }
   }
   async execute(request: UpdateGroupDto) {

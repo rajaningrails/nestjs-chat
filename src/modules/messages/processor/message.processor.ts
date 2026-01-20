@@ -145,6 +145,7 @@ export class MessageProcessor
         last_message_sender_id: data.sender_id,
         last_message_receiver_id: data.receiver_id,
         updated_at: new Date(),
+        school_id: data.school_id
       };
       
       await this.redis.hset(

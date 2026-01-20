@@ -1,6 +1,5 @@
 import {
   Injectable,
-  Inject,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
@@ -10,6 +9,7 @@ import { profanity } from '@2toad/profanity';
 import { generateSafeNumericId } from 'src/utils/helpers';
 import { UsersService } from 'src/modules/users/services/users.service';
 import { ConversationService } from 'src/modules/conversations/services/conversation.service';
+import { SendMessageDto } from '../dto/send-message.dto';
 
 @Injectable()
 export class SendMessageUseCase {
@@ -19,7 +19,7 @@ export class SendMessageUseCase {
     private readonly messagesService: MessageService,
   ) {}
 
-  async execute(request: MessageDto) {
+  async execute(request: SendMessageDto) {
     if (request.message && request.message.trim().length > 0) {
       if (profanity.exists(request.message)) {
         throw new BadRequestException('Profanity not allowed');

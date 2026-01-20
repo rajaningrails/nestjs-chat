@@ -11,6 +11,7 @@ import {
 
 export class SendMessageDto {
   @IsNumber()
+  @IsOptional()
   id: number;
 
   @IsInt()
@@ -43,8 +44,4 @@ export class SendMessageDto {
   @IsString({ each: true })
   @IsNotEmpty()
   attachments?: string[];
-
-  @IsDate()
-  @IsOptional()
-  delivered_at?: Date;
 }

@@ -18,6 +18,7 @@ import { DeleteMessageUseCase } from './use-cases/delete-message.use-case';
 import { DeleteMessageDto } from './dto/delete-message.dto';
 import { SeenMessageDto } from './dto/seen-message.dto';
 import { MessageSeenUseCase } from './use-cases/message-seen.use-case';
+import { SendMessageDto } from './dto/send-message.dto';
 
 @Controller('messages')
 export class MessageController {
@@ -32,7 +33,7 @@ export class MessageController {
 
   @SkipThrottle()
   @Post('send-message')
-  async sendMessage(@Body() dto: CreateMessageDto) {
+  async sendMessage(@Body() dto: SendMessageDto) {
     return this.sendMessageUseCase.execute(dto);
   }
 

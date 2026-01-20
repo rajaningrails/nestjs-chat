@@ -13,6 +13,7 @@ import { UserType } from 'src/modules/users/dto/user-type.enum';
 
 export class CreateMessageDto {
   @IsNumber()
+  @IsOptional()s
   id: number;
 
   @IsInt()
@@ -22,10 +23,6 @@ export class CreateMessageDto {
   @IsInt()
   @IsNotEmpty()
   sender_id: number;
-  
-  @IsNumber()
-  @IsNotEmpty()
-  conversation_id: number
 
   @IsInt()
   @IsNotEmpty()
@@ -57,10 +54,10 @@ export class CreateMessageDto {
   receiver_name: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   sender_image: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   receiver_image: string;
 }

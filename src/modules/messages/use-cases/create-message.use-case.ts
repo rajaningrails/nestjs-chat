@@ -7,7 +7,7 @@ import { profanity } from '@2toad/profanity';
 import { IConversationRepositoryToken } from 'src/modules/conversations/repositories/conversation.repository.interface';
 import { generateSafeNumericId } from 'src/utils/helpers';
 import { UserRepository } from 'src/modules/users/repositories/user.repository';
-import { MessageRepository } from '../repositories/message.repository';
+import { MessageService } from '../services/message.service';
 
 @Injectable()
 export class CreateMessageUseCase {
@@ -15,7 +15,7 @@ export class CreateMessageUseCase {
     @Inject(IConversationRepositoryToken)
     private readonly conversationRepository: ConversationRepository,
     private readonly userRepository: UserRepository,
-    private readonly messageRepository: MessageRepository,
+    private readonly messageService: MessageService,
   ) {}
 
   async execute(request: CreateMessageDto) {
@@ -24,7 +24,7 @@ export class CreateMessageUseCase {
         throw new BadRequestException('Profanity not allowed');
       }
     }
-    let conversation_id: number | null = generateSafeNumericId();
+    let conversation_id: number = 0;
     let message_id: number | null = generateSafeNumericId();
     const existingConversation =
       await this.conversationRepository.checkIfConversationBetweenUserExists(
@@ -35,22 +35,15 @@ export class CreateMessageUseCase {
     if (existingConversation) {
       conversation_id = existingConversation.id;
     } else {
-      await this.conversationRepository.save({
+      const conversation = await this.conversationRepository.save({
         school_id: request.school_id,
         type: ConversationType.USER,
         last_message_sender_id: request.sender_id,
         last_message_receiver_id: request.receiver_id,
-        last_message_id: message_id,
       });
+      conversation_id = conversation.id;
     }
-    await this.messageRepository.save({
-      id: message_id,
-      conversation_id: conversation_id,
-      sender_id: request.sender_id,
-      receiver_id: request.receiver_id,
-      message: request.message,
-      school_id: request.school_id,
-    });
+
     const payloadUsers: CreateUserDto[] = [
       {
         school_id: request.school_id,
@@ -64,6 +57,15 @@ export class CreateMessageUseCase {
       },
     ];
     await this.userRepository.upsertUsers(payloadUsers);
+
+    await this.messageService.createMessage({
+      id: message_id,
+      conversation_id: conversation_id,
+      sender_id: request.sender_id,
+      receiver_id: request.receiver_id,
+      message: request.message,
+      school_id: request.school_id,
+    });
 
     return {
       id: message_id,
@@ -81,7 +83,7 @@ export class CreateMessageUseCase {
       user_details: {
         id: request.sender_id,
         name: request.sender_name,
-        image: request.sender_image,
+        image: request.sender_image ?? '',
         level: request.sender_user_type,
       },
     };

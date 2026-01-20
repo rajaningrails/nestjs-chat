@@ -75,10 +75,10 @@ export class ConversationRepository implements IConversationRepository {
       .where(
         new Brackets((qb) => {
           qb.where(
-            'conversation.sender_id = :user1Id AND conversation.receiver_id = :user2Id',
+            'conversation.last_message_sender_id = :user1Id AND conversation.last_message_receiver_id = :user2Id',
             { user1Id, user2Id },
           ).orWhere(
-            'conversation.sender_id = :user2Id AND conversation.receiver_id = :user1Id',
+            'conversation.last_message_sender_id = :user2Id AND conversation.last_message_receiver_id = :user1Id',
             { user1Id, user2Id },
           );
         }),

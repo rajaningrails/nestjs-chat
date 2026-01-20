@@ -9,12 +9,12 @@ export class SeenMessageDto {
 
   @IsInt()
   @IsOptional()
-  receiverID: number;
+  receiverID?: number;
 
   @IsInt()
   senderID: number;
 
   @IsInt()
   @IsOptional()
-  groupID: number;
+  groupID?: number;
 }

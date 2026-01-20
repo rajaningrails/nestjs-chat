@@ -28,7 +28,6 @@ export class MessageProcessor
 {
   private readonly logger = new Logger(MessageProcessor.name);
   
-  // Buffer keys
   private readonly CREATE_BUFFER_KEY = 'buffer:message:create';
   private readonly DELETE_BUFFER_KEY = 'buffer:message:delete';
   private readonly UPDATE_BUFFER_KEY = 'buffer:message:update';
@@ -36,7 +35,6 @@ export class MessageProcessor
   private readonly GROUP_SEEN_BUFFER_KEY = 'buffer:group-message-seen:create';
   private readonly CONVERSATION_UPDATE_BUFFER_KEY = 'buffer:conversation:update';
   
-  // Lock keys
   private readonly CREATE_LOCK_KEY = 'lock:message:create:flush';
   private readonly UPDATE_LOCK_KEY = 'lock:message:update:flush';
   private readonly DELETE_LOCK_KEY = 'lock:message:delete:flush';
@@ -79,18 +77,15 @@ export class MessageProcessor
 
         const flushPromises: Promise<void>[] = [];
         
-        // CRITICAL: Flush messages BEFORE conversations to avoid FK constraint violations
         if (createLen > 0) flushPromises.push(this.flushCreateBuffer());
         if (updateLen > 0) flushPromises.push(this.flushUpdateBuffer());
         if (deleteLen > 0) flushPromises.push(this.flushDeleteBuffer());
         if (userSeenLen > 0) flushPromises.push(this.flushUserMessageSeen());
         if (groupSeenLen > 0) flushPromises.push(this.flushGroupMessageSeen());
-        // Wait for message operations to complete first
         if (flushPromises.length > 0) {
           await Promise.all(flushPromises);
         }
         
-        // Then flush conversation updates after messages are committed
         if (conversationUpdateLen > 0) {
           await this.flushConversationUpdateBuffer();
         }
@@ -135,10 +130,8 @@ export class MessageProcessor
       throw new Error('Message data is required for create');
     }
 
-    // Buffer the message
     await this.redis.lpush(this.CREATE_BUFFER_KEY, JSON.stringify(data));
     
-    // Buffer conversation update if conversation_id exists
     if (data.conversation_id) {
       const conversationUpdate = {
         id: data.conversation_id,
@@ -161,7 +154,6 @@ export class MessageProcessor
     if (count >= this.BATCH_SIZE) {
       setImmediate(async () => {
         try {
-          // CRITICAL: Flush messages first, then conversations
           await this.flushCreateBuffer();
           await this.flushConversationUpdateBuffer();
         } catch (err) {
@@ -341,7 +333,6 @@ export class MessageProcessor
         this.logger.error('Create batch upsert failed, moving to DLQ', error);
         await this.moveToDLQ('create', batch, error);
         
-        // If messages failed, clear conversation updates to prevent FK violations
         await this.clearRelatedConversationUpdates(batch);
       }
     } catch (error) {
@@ -647,7 +638,6 @@ export class MessageProcessor
     this.logger.log('Flushing all buffers before shutdown...');
     
     try {
-      // CRITICAL: Flush messages first, then conversations
       await Promise.all([
         this.flushCreateBuffer(),
         this.flushUpdateBuffer(),
@@ -656,7 +646,6 @@ export class MessageProcessor
         this.flushGroupMessageSeen()
       ]);
       
-      // Then flush conversation updates after messages are committed
       await this.flushConversationUpdateBuffer();
       
       this.logger.log('All buffers flushed successfully');

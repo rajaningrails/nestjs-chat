@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Server } from 'socket.io';
 import { RedisService } from '../redis.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ChatGroupMember } from 'src/modules/group/entities/chat-group-member.entity';
 import Redis from 'ioredis';
 
 interface EmitOptions {
@@ -16,10 +19,16 @@ export class SocketService {
 
   private readonly USER_SOCKET_PREFIX = 'socket:user:';
   private readonly SOCKET_USER_PREFIX = 'socket:id:';
-  private readonly ROOM_MEMBERS_PREFIX = 'room:members:';
+  private readonly GROUP_MEMBERS_PREFIX = 'group:members:';
   private readonly SOCKET_TTL = 86400; // 24 hours
+  private readonly GROUP_MEMBERS_TTL = 3600; // 1 hour
 
-  constructor(private readonly redisService: RedisService) { }
+  constructor(
+    private readonly redisService: RedisService,
+    @InjectRepository(ChatGroupMember)
+    private readonly groupMemberRepository: Repository<ChatGroupMember>,
+  ) {}
+
   setServer(server: Server) {
     this.server = server;
   }
@@ -29,7 +38,7 @@ export class SocketService {
   }
 
   /**
-   * Store user's socket with atomic operations and proper error handling
+   * Store user's socket with atomic operations
    */
   async addUserSocket(userId: number, socketId: string): Promise<boolean> {
     const pipeline = this.redis.pipeline();
@@ -46,6 +55,7 @@ export class SocketService {
 
       return true;
     } catch (error) {
+      this.logger.error(`Failed to add socket for user ${userId}:`, error);
       return false;
     }
   }
@@ -53,34 +63,34 @@ export class SocketService {
   /**
    * Remove socket with cleanup
    */
-    async removeUserSocket(userId: number, socketId: string): Promise<void> {
-      const pipeline = this.redis.pipeline();
+  async removeUserSocket(userId: number, socketId: string): Promise<void> {
+    const pipeline = this.redis.pipeline();
 
-      const userKey = `${this.USER_SOCKET_PREFIX}${userId}`;
-      const socketKey = `${this.SOCKET_USER_PREFIX}${socketId}`;
+    const userKey = `${this.USER_SOCKET_PREFIX}${userId}`;
+    const socketKey = `${this.SOCKET_USER_PREFIX}${socketId}`;
 
-      pipeline.srem(userKey, socketId);
-      pipeline.del(socketKey);
-      pipeline.scard(userKey);
+    pipeline.srem(userKey, socketId);
+    pipeline.del(socketKey);
+    pipeline.scard(userKey);
 
-      const results = await pipeline.exec();
+    const results = await pipeline.exec();
 
-      const remainingSockets = results?.[2]?.[1] as number;
-      if (remainingSockets === 0) {
-        await this.redis.del(userKey);
-      }
+    const remainingSockets = results?.[2]?.[1] as number;
+    if (remainingSockets === 0) {
+      await this.redis.del(userKey);
     }
+  }
 
   /**
-   * Get all socket IDs for a user with caching
+   * Get all socket IDs for a user
    */
   async getUserSockets(userId: number): Promise<string[]> {
     try {
       const userKey = `${this.USER_SOCKET_PREFIX}${userId}`;
       const sockets = await this.redis.smembers(userKey);
 
-      return sockets.filter(socketId =>
-        this.server?.sockets.sockets.has(socketId)
+      return sockets.filter((socketId) =>
+        this.server?.sockets.sockets.has(socketId),
       );
     } catch (error) {
       this.logger.error(`Failed to get sockets for user ${userId}:`, error);
@@ -89,7 +99,7 @@ export class SocketService {
   }
 
   /**
-   * Get user ID from socket with error handling
+   * Get user ID from socket
    */
   async getUserIdBySocket(socketId: string): Promise<number | null> {
     try {
@@ -103,87 +113,61 @@ export class SocketService {
   }
 
   /**
-   * Join room with proper error handling
+   * Get group member IDs with caching
    */
-  async joinRoom(socketId: string, roomId: string, userId: number): Promise<boolean> {
+  async getGroupMemberIds(groupId: number): Promise<number[]> {
     try {
-      const socket = this.server?.sockets.sockets.get(socketId);
-      if (!socket) {
-        this.logger.warn(`Socket ${socketId} not found when joining room ${roomId}`);
-        return false;
+      const cacheKey = `${this.GROUP_MEMBERS_PREFIX}${groupId}`;
+      
+      // Try to get from cache first
+      const cached = await this.redis.smembers(cacheKey);
+      if (cached.length > 0) {
+        return cached.map((id) => parseInt(id, 10));
       }
 
-      await socket.join(roomId);
+      // Fetch from database
+      const members = await this.groupMemberRepository.find({
+        where: { group_id: groupId },
+        select: ['user_id'],
+      });
 
-      const roomKey = `${this.ROOM_MEMBERS_PREFIX}${roomId}`;
-      const pipeline = this.redis.pipeline();
-      pipeline.sadd(roomKey, userId.toString());
-      pipeline.expire(roomKey, this.SOCKET_TTL);
-      await pipeline.exec();
+      const memberIds = members.map((m) => m.user_id);
 
-      return true;
-    } catch (error) {
-      this.logger.error(`Failed to join room ${roomId}:`, error);
-      return false;
-    }
-  }
-
-  /**
-   * Leave room
-   */
-  async leaveRoom(socketId: string, roomId: string, userId: number): Promise<void> {
-    try {
-      const socket = this.server?.sockets.sockets.get(socketId);
-      if (socket) {
-        await socket.leave(roomId);
+      // Cache the result
+      if (memberIds.length > 0) {
+        const pipeline = this.redis.pipeline();
+        memberIds.forEach((id) => pipeline.sadd(cacheKey, id.toString()));
+        pipeline.expire(cacheKey, this.GROUP_MEMBERS_TTL);
+        await pipeline.exec();
       }
 
-      const roomKey = `${this.ROOM_MEMBERS_PREFIX}${roomId}`;
-      await this.redis.srem(roomKey, userId.toString());
+      return memberIds;
     } catch (error) {
-      this.logger.error(`Failed to leave room ${roomId}:`, error);
-    }
-  }
-
-  /**
-   * Get room members efficiently
-   */
-  async getRoomMembers(roomId: string): Promise<number[]> {
-    try {
-      const roomKey = `${this.ROOM_MEMBERS_PREFIX}${roomId}`;
-      const members = await this.redis.smembers(roomKey);
-      return members.map(m => parseInt(m, 10));
-    } catch (error) {
-      this.logger.error(`Failed to get room members for ${roomId}:`, error);
+      this.logger.error(`Failed to get group members for group ${groupId}:`, error);
       return [];
     }
   }
 
   /**
-   * Clear room
+   * Invalidate group members cache
    */
-  async clearRoom(roomId: string): Promise<void> {
+  async invalidateGroupMembersCache(groupId: number): Promise<void> {
     try {
-      const roomKey = `${this.ROOM_MEMBERS_PREFIX}${roomId}`;
-      await this.redis.del(roomKey);
-
-      // Also remove all sockets from Socket.IO room
-      if (this.server) {
-        this.server.in(roomId).socketsLeave(roomId);
-      }
+      const cacheKey = `${this.GROUP_MEMBERS_PREFIX}${groupId}`;
+      await this.redis.del(cacheKey);
     } catch (error) {
-      this.logger.error(`Failed to clear room ${roomId}:`, error);
+      this.logger.error(`Failed to invalidate cache for group ${groupId}:`, error);
     }
   }
 
   /**
-   * Emit to user with parallel execution and options
+   * Emit to a single user across all their devices
    */
   async emitToUser(
     userId: number,
     event: string,
     data: any,
-    options?: EmitOptions
+    options?: EmitOptions,
   ): Promise<boolean> {
     try {
       const sockets = await this.getUserSockets(userId);
@@ -194,7 +178,7 @@ export class SocketService {
       }
 
       await Promise.all(
-        sockets.map(socketId => {
+        sockets.map((socketId) => {
           const socket = this.server?.sockets.sockets.get(socketId);
           if (!socket) return Promise.resolve();
 
@@ -213,42 +197,12 @@ export class SocketService {
               resolve();
             }
           });
-        })
+        }),
       );
 
       return true;
     } catch (error) {
       this.logger.error(`Failed to emit to user ${userId}:`, error);
-      return false;
-    }
-  }
-
-  /**
-   * Emit to room efficiently
-   */
-  async emitToRoom(
-    roomId: string,
-    event: string,
-    data: any,
-    excludeUserId?: number
-  ): Promise<boolean> {
-    try {
-      if (!this.server) return false;
-
-      if (excludeUserId) {
-        const excludeSockets = await this.getUserSockets(excludeUserId);
-        if (excludeSockets.length > 0) {
-          this.server.to(roomId).except(excludeSockets).emit(event, data);
-        } else {
-          this.server.to(roomId).emit(event, data);
-        }
-      } else {
-        this.server.to(roomId).emit(event, data);
-      }
-
-      return true;
-    } catch (error) {
-      this.logger.error(`Failed to emit to room ${roomId}:`, error);
       return false;
     }
   }
@@ -260,13 +214,16 @@ export class SocketService {
     userIds: number[],
     event: string,
     data: any,
-    batchSize: number = 50
+    batchSize: number = 50,
   ): Promise<void> {
     try {
-      for (let i = 0; i < userIds.length; i += batchSize) {
-        const batch = userIds.slice(i, i + batchSize);
+      // Remove duplicates
+      const uniqueUserIds = [...new Set(userIds)];
+
+      for (let i = 0; i < uniqueUserIds.length; i += batchSize) {
+        const batch = uniqueUserIds.slice(i, i + batchSize);
         await Promise.all(
-          batch.map(userId => this.emitToUser(userId, event, data))
+          batch.map((userId) => this.emitToUser(userId, event, data)),
         );
       }
     } catch (error) {
@@ -275,20 +232,54 @@ export class SocketService {
   }
 
   /**
-   * Broadcast to all connected clients
+   * Emit to all members of a group
+   * @param groupId - The group ID
+   * @param event - Event name
+   * @param data - Data to emit
+   * @param excludeUserId - Optional user ID to exclude from emission
+   * @param excludeUserIds - Optional array of user IDs to exclude from emission
    */
-  async broadcast(event: string, data: any): Promise<void> {
+  async emitToGroupMembers(
+    groupId: number,
+    event: string,
+    data: any,
+    excludeUserId?: number,
+    excludeUserIds?: number[],
+  ): Promise<void> {
     try {
-      if (!this.server) {
-        throw new Error('Socket.IO server not initialized');
+      const memberIds = await this.getGroupMemberIds(groupId);
+
+      if (memberIds.length === 0) {
+        this.logger.debug(`No members found for group ${groupId}`);
+        return;
       }
 
-      this.server.emit(event, data);
+      // Filter out excluded users
+      let targetUserIds = memberIds;
+      
+      if (excludeUserId) {
+        targetUserIds = targetUserIds.filter((id) => id !== excludeUserId);
+      }
+      
+      if (excludeUserIds && excludeUserIds.length > 0) {
+        const excludeSet = new Set(excludeUserIds);
+        targetUserIds = targetUserIds.filter((id) => !excludeSet.has(id));
+      }
+
+      if (targetUserIds.length === 0) {
+        this.logger.debug(`No target users after exclusions for group ${groupId}`);
+        return;
+      }
+
+      await this.emitToUsers(targetUserIds, event, data);
     } catch (error) {
-      this.logger.error('Failed to broadcast:', error);
+      this.logger.error(`Failed to emit to group ${groupId}:`, error);
     }
   }
 
+  /**
+   * Check if user is online
+   */
   async isUserOnline(userId: number): Promise<boolean> {
     try {
       const userKey = `${this.USER_SOCKET_PREFIX}${userId}`;
@@ -301,7 +292,7 @@ export class SocketService {
   }
 
   /**
-   * Get online users 
+   * Get all online users
    */
   async getOnlineUsers(): Promise<number[]> {
     try {
@@ -315,7 +306,7 @@ export class SocketService {
           'MATCH',
           pattern,
           'COUNT',
-          100
+          100,
         );
 
         cursor = newCursor;
@@ -350,13 +341,13 @@ export class SocketService {
       const sockets = await this.getUserSockets(userId);
 
       await Promise.all(
-        sockets.map(async socketId => {
+        sockets.map(async (socketId) => {
           const socket = this.server?.sockets.sockets.get(socketId);
           if (socket) {
             socket.disconnect(true);
           }
           await this.removeUserSocket(userId, socketId);
-        })
+        }),
       );
 
       this.logger.log(`User ${userId} disconnected: ${reason || 'No reason'}`);
@@ -380,7 +371,7 @@ export class SocketService {
           'MATCH',
           pattern,
           'COUNT',
-          100
+          100,
         );
 
         cursor = newCursor;
@@ -397,7 +388,6 @@ export class SocketService {
           }
         }
       } while (cursor !== '0');
-
     } catch (error) {
       this.logger.error('Failed to cleanup stale connections:', error);
     }

@@ -23,7 +23,6 @@ interface AuthenticatedSocket extends Socket {
 
 @WebSocketGateway({
   cors: {
-    // origin: process.env.ALLOWED_ORIGINS,
     origin: '*',
     credentials: true,
   },
@@ -50,37 +49,8 @@ export class MessageGateway
 
   afterInit(server: Server) {
     this.socketService.setServer(server);
-    this.logger.log('🚀 WebSocket Gateway initialized');
-    // this.setupServerMiddleware();
   }
 
-  // private setupServerMiddleware() {
-  //   this.server.use(async (socket: AuthenticatedSocket, next) => {
-  //     try {
-  //       // const token =
-  //       //   socket.handshake.auth?.token ||
-  //       //   socket.handshake.headers?.authorization?.replace('Bearer ', '');
-
-  //       // if (!token) {
-  //       //   return next(new Error('Authentication required'));
-  //       // }
-
-  //       // const payload = await this.jwtService.verifyAsync(token);
-
-  //       // socket.userId = payload.sub || payload.userId;
-  //       // socket.schoolId = payload.schoolId;
-
-  //       next();
-  //     } catch (error) {
-  //       this.logger.error('Authentication failed:', error);
-  //       // next(new Error('Invalid token'));
-  //     }
-  //   });
-  // }
-
-  /**
-   * Handle new client connection
-   */
   async handleConnection(client: AuthenticatedSocket) {
     try {
       let userId: string | number = client.handshake.query?.sender_id as string;
@@ -90,6 +60,8 @@ export class MessageGateway
         return;
       }
       userId = Number(userId);
+      client.userId = userId;
+
       const success = await this.socketService.addUserSocket(userId, client.id);
 
       if (!success) {
@@ -99,8 +71,6 @@ export class MessageGateway
       }
 
       await this.presenceService.setOnline(userId);
-
-      await this.joinUserConversations(client, userId);
 
       this.setupHeartbeat(client, userId);
 
@@ -117,9 +87,6 @@ export class MessageGateway
     }
   }
 
-  /**
-   * Handle client disconnection
-   */
   async handleDisconnect(client: AuthenticatedSocket) {
     try {
       const userId = client.userId;
@@ -142,9 +109,6 @@ export class MessageGateway
     }
   }
 
-  /**
-   * Setup heartbeat monitoring
-   */
   private setupHeartbeat(client: AuthenticatedSocket, userId: number) {
     this.clearHeartbeat(client.id);
 
@@ -162,9 +126,6 @@ export class MessageGateway
     client.emit('ping');
   }
 
-  /**
-   * Clear heartbeat timeout
-   */
   private clearHeartbeat(socketId: string) {
     const timeout = this.heartbeatTimeouts.get(socketId);
     if (timeout) {
@@ -173,37 +134,15 @@ export class MessageGateway
     }
   }
 
-  /**
-   * Join user to their conversation rooms
-   */
-  private async joinUserConversations(
-    client: AuthenticatedSocket,
-    userId: number,
-  ): Promise<void> {
-    try {
-      const conversations =
-        await this.conversationService.getUserConversations(userId);
-
-      for (const conversation of conversations) {
-        const roomId = `conversation:${conversation.id}`;
-        await this.socketService.joinRoom(client.id, roomId, userId);
-      }
-
-      this.logger.log(
-        `User ${userId} joined ${conversations.length} conversation rooms`,
-      );
-    } catch (error) {
-      this.logger.error('Failed to join user conversations:', error);
-    }
-  }
-
-  /**
-   * Handle typing indicator
-   */
   @SubscribeMessage('typing')
   async handleTyping(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { conversation_id: number; is_typing: boolean },
+    @MessageBody() data: { 
+      conversation_id: number; 
+      is_typing: boolean;
+      group_id?: number;
+      receiver_id?: number;
+    },
   ) {
     const userId = client.userId;
 
@@ -211,88 +150,101 @@ export class MessageGateway
 
     try {
       await this.typingService.startTyping(data.conversation_id, userId);
+
+      const typingData = {
+        conversation_id: data.conversation_id,
+        user_id: userId,
+        is_typing: data.is_typing,
+        timestamp: new Date(),
+      };
+
+      if (data.group_id) {
+        // Group chat - emit to all group members except sender
+        await this.socketService.emitToGroupMembers(
+          data.group_id,
+          'typing',
+          typingData,
+          userId, // exclude sender
+        );
+      } else if (data.receiver_id) {
+        // One-to-one chat - emit to receiver only
+        await this.socketService.emitToUser(
+          data.receiver_id,
+          'typing',
+          typingData,
+        );
+      }
     } catch (error) {
       this.logger.error('Failed to handle typing indicator:', error);
     }
   }
 
-  /**
-   * Handle message seen
-   */
   @SubscribeMessage('mark-seen')
   async handleMarkSeen(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { message_id: number; group_id: number },
+    @MessageBody() data: { 
+      message_id: number; 
+      conversation_id: number;
+      group_id?: number;
+      sender_id?: number;
+      receiver_id?: number
+    },
   ) {
     const userId = client.userId;
 
     if (!userId) return;
 
     try {
-      // if (data?.group_id) {
-      //   this.messageService.groupChatMessageSeen(data);
-      // } else {
-      //   this.messageService.oneToOneChatMessageSeen(data);
-      // }
+      if (data?.group_id) {
+        await this.messageService.groupChatMessageSeen({
+          conversationID: data.conversation_id,
+          groupID: data.group_id,
+          messageId: data.message_id,
+          senderID: data.sender_id!,
+        });
+        
+        // Emit to all group members including the one who marked it seen
+        await this.socketService.emitToGroupMembers(
+          data.group_id,
+          'message-seen',
+          {
+            conversation_id: data.conversation_id,
+            message_id: data.message_id,
+            seen_by: userId,
+            timestamp: new Date(),
+          },
+        );
+      } else {
+        await this.messageService.oneToOneChatMessageSeen({
+          conversationID: data.conversation_id,
+          messageId: data.message_id,
+          senderID: data.sender_id!,
+          receiverID: data.receiver_id!,
+        });
+        
+        // Emit to both sender and the one who marked it seen
+        const userIds = [userId];
+        if (data.sender_id && data.sender_id !== userId) {
+          userIds.push(data.sender_id);
+        }
+
+        await this.socketService.emitToUsers(
+          userIds,
+          'message-seen',
+          {
+            conversation_id: data.conversation_id,
+            message_id: data.message_id,
+            seen_by: userId,
+            timestamp: new Date(),
+          },
+        );
+      }
     } catch (error) {
+      this.logger.error('Failed to handle mark-seen:', error);
       client.emit('error', {
         event: 'mark-seen',
         error: 'Failed to mark message as seen',
       });
-    }
-  }
-
-  /**
-   * Handle join conversation
-   */
-  @SubscribeMessage('join-conversation')
-  async handleJoinConversation(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { conversation_id: number },
-  ) {
-    const userId = client.userId;
-
-    if (!userId) return;
-
-    try {
-      const roomId = `conversation:${data.conversation_id}`;
-      await this.socketService.joinRoom(client.id, roomId, userId);
-
-      client.emit('joined-conversation', {
-        conversation_id: data.conversation_id,
-        timestamp: new Date(),
-      });
-    } catch (error) {
-      this.logger.error('Failed to join conversation:', error);
-      client.emit('error', {
-        event: 'join-conversation',
-        error: 'Failed to join conversation',
-      });
-    }
-  }
-
-  /**
-   * Handle leave conversation
-   */
-  @SubscribeMessage('leave-conversation')
-  async handleLeaveConversation(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { conversation_id: number },
-  ) {
-    const userId = client.userId;
-
-    if (!userId) return;
-
-    try {
-      const roomId = `conversation:${data.conversation_id}`;
-      await this.socketService.leaveRoom(client.id, roomId, userId);
-
-      client.emit('left-conversation', {
-        conversation_id: data.conversation_id,
-        timestamp: new Date(),
-      });
-    } catch (error) {
-      this.logger.error('Failed to leave conversation:', error);
     }
   }
 
@@ -302,14 +254,14 @@ export class MessageGateway
     groupData: any,
   ) {
     try {
-      await this.socketService.emitToUsers(memberIds, 'group-created', {
-        conversation_id: conversationId,
-        conversation: groupData,
-        timestamp: new Date(),
-      });
-
-      this.logger.log(
-        `Group ${conversationId} created, notified ${memberIds.length} members`,
+      await this.socketService.emitToUsers(
+        memberIds,
+        'group-created',
+        {
+          conversation_id: conversationId,
+          conversation: groupData,
+          timestamp: new Date(),
+        },
       );
     } catch (error) {
       this.logger.error('Failed to emit group created event:', error);
@@ -318,19 +270,22 @@ export class MessageGateway
 
   async emitGroupUpdated(
     conversationId: number,
+    groupId: number,
     updates: any,
     updatedBy: number,
   ) {
     try {
-      const roomId = `conversation:${conversationId}`;
-      await this.socketService.emitToRoom(roomId, 'group-updated', {
-        conversation_id: conversationId,
-        updates,
-        updated_by: updatedBy,
-        timestamp: new Date(),
-      });
-
-      this.logger.log(`Group ${conversationId} updated by user ${updatedBy}`);
+      // Emit to all group members including the updater
+      await this.socketService.emitToGroupMembers(
+        groupId,
+        'group-updated',
+        {
+          conversation_id: conversationId,
+          updates,
+          updated_by: updatedBy,
+          timestamp: new Date(),
+        },
+      );
     } catch (error) {
       this.logger.error('Failed to emit group updated event:', error);
     }
@@ -338,15 +293,15 @@ export class MessageGateway
 
   async emitMemberAdded(
     conversationId: number,
+    groupId: number,
     newMemberIds: number[],
     addedBy: number,
     groupData: any,
   ) {
     try {
-      const roomId = `conversation:${conversationId}`;
-
-      await this.socketService.emitToRoom(
-        roomId,
+      // Emit to existing group members (excluding new members)
+      await this.socketService.emitToGroupMembers(
+        groupId,
         'member-added',
         {
           conversation_id: conversationId,
@@ -354,16 +309,12 @@ export class MessageGateway
           added_by: addedBy,
           timestamp: new Date(),
         },
-        addedBy,
+        undefined,
+        newMemberIds, // exclude new members from this event
       );
 
+      // Emit to new members separately with full group data
       for (const memberId of newMemberIds) {
-        const sockets = await this.socketService.getUserSockets(memberId);
-
-        for (const socketId of sockets) {
-          await this.socketService.joinRoom(socketId, roomId, memberId);
-        }
-
         await this.socketService.emitToUser(memberId, 'added-to-group', {
           conversation_id: conversationId,
           conversation: groupData,
@@ -371,10 +322,6 @@ export class MessageGateway
           timestamp: new Date(),
         });
       }
-
-      this.logger.log(
-        `Added ${newMemberIds.length} members to group ${conversationId}`,
-      );
     } catch (error) {
       this.logger.error('Failed to emit member added event:', error);
     }
@@ -382,24 +329,24 @@ export class MessageGateway
 
   async emitMemberRemoved(
     conversationId: number,
+    groupId: number,
     removedMemberId: number,
     removedBy: number,
   ) {
     try {
-      const roomId = `conversation:${conversationId}`;
+      // Emit to remaining group members
+      await this.socketService.emitToGroupMembers(
+        groupId,
+        'member-removed',
+        {
+          conversation_id: conversationId,
+          removed_member: removedMemberId,
+          removed_by: removedBy,
+          timestamp: new Date(),
+        },
+      );
 
-      await this.socketService.emitToRoom(roomId, 'member-removed', {
-        conversation_id: conversationId,
-        removed_member: removedMemberId,
-        removed_by: removedBy,
-        timestamp: new Date(),
-      });
-
-      const sockets = await this.socketService.getUserSockets(removedMemberId);
-      for (const socketId of sockets) {
-        await this.socketService.leaveRoom(socketId, roomId, removedMemberId);
-      }
-
+      // Notify the removed member
       await this.socketService.emitToUser(
         removedMemberId,
         'removed-from-group',
@@ -409,51 +356,61 @@ export class MessageGateway
           timestamp: new Date(),
         },
       );
-
-      this.logger.log(
-        `Removed user ${removedMemberId} from group ${conversationId}`,
-      );
     } catch (error) {
       this.logger.error('Failed to emit member removed event:', error);
     }
   }
 
-  async emitGroupDeleted(conversationId: number, deletedBy: number) {
+  async emitGroupDeleted(
+    conversationId: number,
+    groupId: number,
+    deletedBy: number,
+  ) {
     try {
-      const roomId = `conversation:${conversationId}`;
-
-      await this.socketService.emitToRoom(roomId, 'group-deleted', {
-        conversation_id: conversationId,
-        deleted_by: deletedBy,
-        timestamp: new Date(),
-      });
-
-      await this.socketService.clearRoom(roomId);
-
-      this.logger.log(`Group ${conversationId} deleted by user ${deletedBy}`);
+      // Emit to all group members including the one who deleted it
+      await this.socketService.emitToGroupMembers(
+        groupId,
+        'group-deleted',
+        {
+          conversation_id: conversationId,
+          deleted_by: deletedBy,
+          timestamp: new Date(),
+        },
+      );
     } catch (error) {
       this.logger.error('Failed to emit group deleted event:', error);
     }
   }
 
-  async emitNewMessage(conversationId: number, message: any, senderId: number) {
+  async emitNewMessage(
+    conversationId: number,
+    message: any,
+    senderId: number,
+    receiverId?: number,
+    groupId?: number,
+  ) {
     try {
-      const roomId = `conversation:${conversationId}`;
+      const messageData = {
+        conversation_id: conversationId,
+        message,
+        timestamp: new Date(),
+      };
 
-      await this.socketService.emitToRoom(
-        roomId,
-        'new-message',
-        {
-          conversation_id: conversationId,
-          message,
-          timestamp: new Date(),
-        },
-        senderId,
-      );
-
-      this.logger.log(
-        `New message in conversation ${conversationId} from user ${senderId}`,
-      );
+      if (groupId) {
+        // Group message - emit to all group members including sender
+        await this.socketService.emitToGroupMembers(
+          groupId,
+          'message',
+          messageData,
+        );
+      } else if (receiverId) {
+        // One-to-one message - emit to both sender and receiver
+        await this.socketService.emitToUsers(
+          [senderId, receiverId],
+          'message',
+          messageData,
+        );
+      }
     } catch (error) {
       this.logger.error('Failed to emit new message event:', error);
     }
@@ -462,17 +419,33 @@ export class MessageGateway
   async emitMessageDeleted(
     conversationId: number,
     messageId: number,
-    deletedBy: number,
+    senderId: number,
+    receiverId?: number,
+    groupId?: number,
   ) {
     try {
-      const roomId = `conversation:${conversationId}`;
-
-      await this.socketService.emitToRoom(roomId, 'message-deleted', {
+      const deleteData = {
         conversation_id: conversationId,
         message_id: messageId,
-        deleted_by: deletedBy,
+        sender_id: senderId,
         timestamp: new Date(),
-      });
+      };
+
+      if (groupId) {
+        // Group message deletion - emit to all group members including sender
+        await this.socketService.emitToGroupMembers(
+          groupId,
+          'message-deleted',
+          { ...deleteData, group_id: groupId },
+        );
+      } else if (receiverId) {
+        // One-to-one message deletion - emit to both sender and receiver
+        await this.socketService.emitToUsers(
+          [senderId, receiverId],
+          'message-deleted',
+          deleteData,
+        );
+      }
     } catch (error) {
       this.logger.error('Failed to emit message deleted event:', error);
     }

@@ -8,7 +8,6 @@ export const socketAuthMiddleware = (socket: Socket, next: (err?: any) => void) 
     const token = socket.handshake.auth.token || socket.handshake.query.token;
     const userId = socket.handshake.query.userId;
 
-    // Basic validation
     if (!userId) {
       logger.warn(`Connection rejected: No userId provided`);
       return next(new Error('Authentication error: userId required'));
@@ -20,7 +19,6 @@ export const socketAuthMiddleware = (socket: Socket, next: (err?: any) => void) 
     //   return next(new Error('Authentication error: Invalid token'));
     // }
 
-    // Attach user info to socket
     socket.data.userId = parseInt(userId as string);
     socket.data.authenticatedAt = new Date();
 

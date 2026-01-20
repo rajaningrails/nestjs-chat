@@ -9,6 +9,7 @@ export class DeleteMessageUseCase {
   ) {}
 
   async execute(request: DeleteMessageDto) {
+    console.log(request);
     await this.messageService.deleteMessage(request.messageId);
     return {
       messageId: request.messageId,

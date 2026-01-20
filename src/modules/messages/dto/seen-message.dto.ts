@@ -1,4 +1,4 @@
-import { IsInt, IsNumber } from 'class-validator';
+import { IsInt, IsNumber, IsOptional } from 'class-validator';
 
 export class SeenMessageDto {
   @IsNumber()
@@ -8,8 +8,13 @@ export class SeenMessageDto {
   conversationID: number;
 
   @IsInt()
+  @IsOptional()
   receiverID: number;
 
   @IsInt()
   senderID: number;
+
+  @IsInt()
+  @IsOptional()
+  groupID: number;
 }

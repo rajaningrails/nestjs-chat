@@ -8,6 +8,7 @@ import {
   JoinColumn,
   Index,
   PrimaryColumn,
+  Unique,
 } from 'typeorm';
 import { ChatGroup } from './chat-group.entity';
 import { User } from 'src/modules/users/entities/user.entity';
@@ -16,6 +17,11 @@ import { Message } from 'src/modules/messages/entities/message.entity';
 
 @Entity('group_message_seen')
 @Index(['conversation_id', 'message_id', 'user_id'], { unique: true })
+@Unique('UQ_GROUP_MESSAGE_SEEN', [
+  'group_id',
+  'user_id',
+  'message_id',
+])
 export class GroupMessageSeen {
   @PrimaryGeneratedColumn()
   id: number;

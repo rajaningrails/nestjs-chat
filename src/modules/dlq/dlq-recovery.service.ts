@@ -44,7 +44,7 @@ export class DLQRecoveryService implements OnModuleInit {
     },
     group: {
       repository: 'GroupRepository',
-      operations: ['group-seen'],
+      operations: ['group-message-seen'],
       maxRetries: 3,
       retryDelay: 30000,
       backoffMultiplier: 2,
@@ -161,7 +161,7 @@ export class DLQRecoveryService implements OnModuleInit {
       'update': 'updateBatch',
       'delete': 'deleteBatch',
       'one-to-one-seen': 'oneToOneChatMessageSeenBatch',
-      'group-seen': 'groupMessageSeenBatch',
+      'group-message-seen': 'groupMessageSeenBatch',
       'conversation-update': 'updateBatch',
     };
 

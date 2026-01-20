@@ -81,10 +81,10 @@ export class GroupService {
 
   async groupMessageSeenBatch(
     payload: {
-      group_id: number;
-      user_id: number;
-      message_id: number;
-      conversation_id: number;
+      messageId: number;
+      conversationID: number;
+      senderID: number;
+      groupID: number;
     }[],
   ) {
     return await this.groupRepository.groupMessageSeenBatch(payload);

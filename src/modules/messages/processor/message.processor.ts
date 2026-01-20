@@ -68,12 +68,13 @@ export class MessageProcessor
       if (this.isShuttingDown) return;
       
       try {
-        const [createLen, updateLen, deleteLen, userSeenLen, conversationUpdateLen] = await Promise.all([
+        const [createLen, updateLen, deleteLen, userSeenLen, conversationUpdateLen, groupSeenLen] = await Promise.all([
           this.redis.llen(this.CREATE_BUFFER_KEY),
           this.redis.hlen(this.UPDATE_BUFFER_KEY),
           this.redis.scard(this.DELETE_BUFFER_KEY),
           this.redis.scard(this.USER_SEEN_BUFFER_KEY),
           this.redis.hlen(this.CONVERSATION_UPDATE_BUFFER_KEY),
+          this.redis.llen(this.GROUP_SEEN_BUFFER_KEY)
         ]);
 
         const flushPromises: Promise<void>[] = [];
@@ -83,7 +84,7 @@ export class MessageProcessor
         if (updateLen > 0) flushPromises.push(this.flushUpdateBuffer());
         if (deleteLen > 0) flushPromises.push(this.flushDeleteBuffer());
         if (userSeenLen > 0) flushPromises.push(this.flushUserMessageSeen());
-        
+        if (groupSeenLen > 0) flushPromises.push(this.flushGroupMessageSeen());
         // Wait for message operations to complete first
         if (flushPromises.length > 0) {
           await Promise.all(flushPromises);
@@ -245,7 +246,7 @@ export class MessageProcessor
       );
     }
 
-    return { success: true, buffered: true, operation: 'group-seen' };
+    return { success: true, buffered: true, operation: 'group-message-seen' };
   }
 
   private async flushGroupMessageSeen() {
@@ -278,7 +279,7 @@ export class MessageProcessor
       try {
         await this.groupService.groupMessageSeenBatch(batch);
       } catch (error) {
-        await this.moveToDLQ('group-seen', batch, error);
+        await this.moveToDLQ('group-message-seen', batch, error);
       }
     } finally {
       await this.redis.del(this.GROUP_SEEN_LOCK_KEY);
@@ -611,7 +612,7 @@ export class MessageProcessor
   }
 
   private async moveToDLQ(
-    operation: 'create' | 'update' | 'delete' | 'one-to-one-seen' | 'group-seen' | 'conversation-update',
+    operation: 'create' | 'update' | 'delete' | 'one-to-one-seen' | 'group-message-seen' | 'conversation-update',
     data: any[],
     error: any,
   ) {
@@ -652,6 +653,7 @@ export class MessageProcessor
         this.flushUpdateBuffer(),
         this.flushDeleteBuffer(),
         this.flushUserMessageSeen(),
+        this.flushGroupMessageSeen()
       ]);
       
       // Then flush conversation updates after messages are committed

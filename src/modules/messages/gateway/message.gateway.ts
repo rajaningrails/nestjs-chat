@@ -229,11 +229,11 @@ export class MessageGateway
     if (!userId) return;
 
     try {
-      if (data?.group_id) {
-        this.messageService.groupChatMessageSeen(data.message_id);
-      } else {
-        this.messageService.oneToOneChatMessageSeen(data.message_id);
-      }
+      // if (data?.group_id) {
+      //   this.messageService.groupChatMessageSeen(data);
+      // } else {
+      //   this.messageService.oneToOneChatMessageSeen(data);
+      // }
     } catch (error) {
       client.emit('error', {
         event: 'mark-seen',

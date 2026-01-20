@@ -4,6 +4,7 @@ import { Queue } from 'bullmq';
 import { MessageProcessorConfig } from 'src/infrastructure/bullmq/size-queue.config';
 import { MessageDto } from '../dto/message.dto';
 import { Message } from '../entities/message.entity';
+import { SeenMessageDto } from '../dto/seen-message.dto';
 
 @Injectable()
 export class MessageService {
@@ -77,39 +78,6 @@ export class MessageService {
     return { ...data };
   }
 
-  async updateMessages(
-    updates: Array<Partial<MessageDto>>,
-  ): Promise<Partial<Message>[]> {
-    const invalidUpdates = updates.filter((update) => !update.id);
-    if (invalidUpdates.length > 0) {
-      throw new Error(
-        `${invalidUpdates.length} updates missing required ID field`,
-      );
-    }
-
-    const payloads = updates.map((update) => ({
-      ...update,
-      updated_at: new Date(),
-    }));
-
-    const jobs = payloads.map((data) => ({
-      name: 'update-message',
-      data,
-      opts: {
-        priority: 2,
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 2000,
-        },
-      },
-    }));
-
-    await this.messageQueue.addBulk(jobs);
-
-    return payloads;
-  }
-
   async deleteMessage(messageId: string | number) {
     if (!messageId) {
       throw new Error('Message ID is required for delete');
@@ -129,37 +97,16 @@ export class MessageService {
     );
   }
 
-  async deleteMessages(messageIds: Array<string | number>) {
-    if (!messageIds || messageIds.length === 0) {
-      throw new Error('At least one message ID is required for batch delete');
-    }
-
-    const jobs = messageIds.map((id) => ({
-      name: 'delete-message',
-      data: { id },
-      opts: {
-        priority: 2,
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 2000,
-        },
-      },
-    }));
-
-    await this.messageQueue.addBulk(jobs);
-  }
-
-  async oneToOneChatMessageSeen(messageId: string | number) {
-    if (!messageId) {
+  async oneToOneChatMessageSeen(request: SeenMessageDto) {
+    if (!request?.messageId) {
       throw new Error('Message ID is required for seen status');
     }
 
     await this.messageQueue.add(
       'one-to-one-seen',
-      { id: messageId },
+      request,
       {
-        jobId: `one-to-one-message-seen-${messageId}`,
+        jobId: `one-to-one-message-seen-${request?.messageId}`,
         priority: 3,
         attempts: 3,
         backoff: {
@@ -170,60 +117,16 @@ export class MessageService {
     );
   }
 
-  async oneToOneChatMessageSeenBatch(messageIds: Array<string | number>) {
-    if (!messageIds || messageIds.length === 0) {
-      throw new Error('At least one message ID is required for batch seen');
-    }
-
-    const jobs = messageIds.map((id) => ({
-      name: 'one-to-one-seen',
-      data: { id },
-      opts: {
-        jobId: `one-to-one-message-seen-${id}`,
-        priority: 3,
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 1000,
-        },
-      },
-    }));
-
-    await this.messageQueue.addBulk(jobs);
-  }
-
-  async groupChatMessageSeen(messageId: string | number) {
-    if (!messageId) {
+  async groupChatMessageSeen(request: SeenMessageDto) {
+    if (!request.messageId) {
       throw new Error('Message ID is required for group seen status');
     }
 
     await this.messageQueue.add(
-      'group-seen',
-      { id: messageId },
+      'group-message-seen',
+      { ...request },
       {
-        jobId: `group-message-seen-${messageId}`,
-        priority: 3, 
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 1000,
-        },
-      },
-    );
-  }
-
-  async groupChatMessageSeenBatch(messageIds: Array<string | number>) {
-    if (!messageIds || messageIds.length === 0) {
-      throw new Error(
-        'At least one message ID is required for batch group seen',
-      );
-    }
-
-    const jobs = messageIds.map((id) => ({
-      name: 'group-seen',
-      data: { id },
-      opts: {
-        jobId: `group-message-seen-${id}`,
+        jobId: `group-message-seen-${request.messageId}`,
         priority: 3,
         attempts: 3,
         backoff: {
@@ -231,9 +134,7 @@ export class MessageService {
           delay: 1000,
         },
       },
-    }));
-
-    await this.messageQueue.addBulk(jobs);
+    );
   }
 
   async flushBuffers() {

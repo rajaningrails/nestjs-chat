@@ -81,12 +81,7 @@ export class GroupRepository implements IGroupRepository {
   }
 
   async create(data: CreateChatGroupDto) {
-    const {
-      school_id,
-      group_name,
-      created_by,
-      group_image,
-    } = data;
+    const { school_id, group_name, created_by, group_image } = data;
 
     const group = this.groupRepo.create({
       school_id,
@@ -101,18 +96,33 @@ export class GroupRepository implements IGroupRepository {
 
   async groupMessageSeenBatch(
     payload: {
-      group_id: number;
-      user_id: number;
-      message_id: number;
-      conversation_id: number;
+      messageId: number;
+      conversationID: number;
+      senderID: number;
+      groupID: number;
     }[],
   ) {
-    try {
-      await this.groupMessageSeenRepo.save(payload);
-    } catch (err) {
-      throw err;
-    }
-  }
+    if (!payload.length) return;
+  
+    const values = payload.map(p => ({
+      message_id: p.messageId,
+      conversation_id: p.conversationID,
+      user_id: p.senderID,
+      group_id: p.groupID,
+    }));
+  
+    await this.groupMessageSeenRepo
+      .createQueryBuilder()
+      .insert()
+      .into(GroupMessageSeen)
+      .values(values)
+      .orUpdate(
+        ['conversation_id', 'updated_at'],
+        ['group_id', 'user_id', 'message_id'],
+      )
+      .execute();
+  }  
+
   async update(data: UpdateGroupDto): Promise<IRepositoryGroupResponse> {
     const {
       group_id,

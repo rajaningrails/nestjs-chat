@@ -200,6 +200,10 @@ export class GroupRepository implements IGroupRepository {
     return group;
   }
 
+  async getGroupMembers(groupId:number): Promise<ChatGroupMember[]> {
+    return this.groupMemberRepo.find({ where: { group_id: groupId }, select:['user_id']});
+  }
+
   async getGroupNamesByUserId(
     school_id: number,
     user_id: number,

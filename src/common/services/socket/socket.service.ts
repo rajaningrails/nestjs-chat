@@ -1,10 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Server } from 'socket.io';
 import { RedisService } from '../redis.service';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ChatGroupMember } from 'src/modules/group/entities/chat-group-member.entity';
 import Redis from 'ioredis';
+import { GroupRepository } from 'src/modules/group/repositories/group.repository';
 
 interface EmitOptions {
   timeout?: number;
@@ -25,8 +23,7 @@ export class SocketService {
 
   constructor(
     private readonly redisService: RedisService,
-    @InjectRepository(ChatGroupMember)
-    private readonly groupMemberRepository: Repository<ChatGroupMember>,
+    private readonly groupRepository: GroupRepository,
   ) {}
 
   setServer(server: Server) {
@@ -126,10 +123,7 @@ export class SocketService {
       }
 
       // Fetch from database
-      const members = await this.groupMemberRepository.find({
-        where: { group_id: groupId },
-        select: ['user_id'],
-      });
+      const members = await this.groupRepository.getGroupMembers(groupId);
 
       const memberIds = members.map((m) => m.user_id);
 

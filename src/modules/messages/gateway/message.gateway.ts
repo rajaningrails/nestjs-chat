@@ -28,7 +28,7 @@ interface AuthenticatedSocket extends Socket {
   },
   transports: ['websocket', 'polling'],
   pingInterval: 25000,
-  pingTimeout: 25000,
+  pingTimeout: 60000,
 })
 export class MessageGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect

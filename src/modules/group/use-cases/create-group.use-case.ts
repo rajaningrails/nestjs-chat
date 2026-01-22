@@ -5,6 +5,8 @@ import { GroupRepository } from '../repositories/group.repository';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
 import { CreateChatGroupDto } from '../dto/chat-group.dto';
 import { GroupService } from '../service/group.service';
+import { User } from 'src/modules/users/entities/user.entity';
+import { CreateUserDto } from 'src/modules/users/dto/create-user.dto';
 
 @Injectable()
 export class CreateGroupUseCase {
@@ -33,10 +35,12 @@ export class CreateGroupUseCase {
       ...(request.studentDetails || []),
       ...(request.staffDetails || []),
     ];
-    const users = allMembers?.map((p) => ({
+    const users:CreateUserDto[] = allMembers?.map((p) => ({
       user_id: p.id,
       school_id: request.school_id,
       type: p.type,
+      image: p?.image,
+      name: p?.name
     }));
 
     let group_type: GroupType = GroupType.STUDENTS_GROUP;

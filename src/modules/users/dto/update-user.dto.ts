@@ -2,6 +2,8 @@ import {
   IsInt,
   IsNotEmpty,
   IsNumber,
+  IsOptional,
+  IsString,
 } from 'class-validator';
 
 export class UpdateUserDto {
@@ -12,6 +14,14 @@ export class UpdateUserDto {
   @IsInt()
   @IsNotEmpty()
   school_id: number;
+
+  @IsString()
+  @IsOptional()
+  name: string;
+
+  @IsString()
+  @IsOptional()
+  image: string;
 
   @IsInt()
   @IsNotEmpty()

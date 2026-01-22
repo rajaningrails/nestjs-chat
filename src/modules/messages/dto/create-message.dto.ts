@@ -8,23 +8,24 @@ import {
   IsArray,
   IsNumber,
   IsDate,
+  IsNumberString,
 } from 'class-validator';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
 
 export class CreateMessageDto {
   @IsNumber()
-  @IsOptional()s
+  @IsOptional()
   id: number;
 
-  @IsInt()
+  @IsNumberString()
   @IsNotEmpty()
   school_id: number;
 
-  @IsInt()
+  @IsNumberString()
   @IsNotEmpty()
   sender_id: number;
 
-  @IsInt()
+  @IsNumberString()
   @IsNotEmpty()
   receiver_id: number;
 

@@ -249,68 +249,77 @@ export class ConversationRepository implements IConversationRepository {
       let baseQuery = `
         SELECT DISTINCT
           c.*,
-          g.name as group_name,
-          g.image as group_image,
-          g.type as group_type_name,
+          g.group_name as group_name,
+          g.group_image as group_image,
           CASE 
-            WHEN c.last_message_sender_id = $3 THEN c.last_message_receiver_id
+            WHEN c.last_message_sender_id = ? THEN c.last_message_receiver_id
             ELSE c.last_message_sender_id
           END as other_user_id,
           u.name as other_user_name,
-          u.profile_image as other_user_profile_image,
+          u.image as other_user_profile_image,
           CASE 
-            WHEN c.type = $6 THEN 
+            WHEN c.type = ? THEN 
               CASE WHEN seen.id IS NOT NULL THEN true ELSE false END
             ELSE NULL
           END as is_seen,
-          m.content as last_message_content,
+          m.message as last_message,
+          m.attachments as last_attachments,
           m.created_at as last_message_created_at
         FROM conversations c
         LEFT JOIN chat_groups g ON c.group_id = g.id
-        LEFT JOIN group_members gm ON g.id = gm.group_id
+        LEFT JOIN chat_group_members gm ON g.id = gm.group_id
         LEFT JOIN users u ON (
-          c.type = $5 AND (
-            (c.last_message_sender_id = u.id AND u.id != $3) OR
-            (c.last_message_receiver_id = u.id AND u.id != $3)
+          c.type = ? AND (
+            (c.last_message_sender_id = u.user_id AND u.user_id != ?) OR
+            (c.last_message_receiver_id = u.user_id AND u.user_id != ?)
           )
         )
         LEFT JOIN messages m ON c.last_message_id = m.id
-        LEFT JOIN chat_group_message_seen seen ON (
-          seen.message_id = c.last_message_id AND seen.user_id = $3
+        LEFT JOIN group_message_seen seen ON (
+          seen.message_id = c.last_message_id AND seen.user_id = ?
         )
-        WHERE c.school_id = $1
+        WHERE c.school_id = ?
           AND c.deleted_at IS NULL
           AND (
-            c.last_message_sender_id = $3 OR
-            c.last_message_receiver_id = $3 OR
-            gm.user_id = $3
+            c.last_message_sender_id = ? OR
+            c.last_message_receiver_id = ? OR
+            gm.user_id = ?
           )
       `;
 
       const params: any[] = [
-        school_id, 
-        limit, 
-        user_id, 
-        offset, 
-        ConversationType.USER, 
+        user_id,              
         ConversationType.GROUP, 
+        ConversationType.USER,  
+        user_id,              
+        user_id,              
+        user_id,              
+        school_id,            
+        user_id,              
+        user_id,              
+        user_id,              
       ];
 
       if (search && search.trim() !== '') {
         baseQuery += `
           AND (
-            (c.type = $5 AND (u.name ILIKE $7))
+            (c.type = ? AND (u.name LIKE ?))
             OR
-            (c.type = $6 AND g.name ILIKE $7)
+            (c.type = ? AND g.group_name LIKE ?)
           )
         `;
-        params.push(`%${search}%`);
+        params.push(
+          ConversationType.USER,
+          `%${search}%`,
+          ConversationType.GROUP,
+          `%${search}%`
+        );
       }
 
-      const countQuery = `
-        SELECT COUNT(DISTINCT c.id) as total
-        FROM (${baseQuery}) as subquery
-      `;
+    const countQuery = `
+      SELECT COUNT(DISTINCT subquery.id) as total
+      FROM (${baseQuery}) as subquery
+    `;
 
       const countResult = await this.conversationRepository.query(
         countQuery,
@@ -321,12 +330,12 @@ export class ConversationRepository implements IConversationRepository {
       const dataQuery = `
         ${baseQuery}
         ORDER BY c.updated_at DESC
-        LIMIT $2 OFFSET $4
+        LIMIT ? OFFSET ?
       `;
 
       const conversations = await this.conversationRepository.query(
         dataQuery,
-        params,
+        [...params, limit, offset],
       );
 
       const totalPages = Math.ceil(totalRecords / limit);

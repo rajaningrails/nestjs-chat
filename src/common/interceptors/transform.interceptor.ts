@@ -27,12 +27,18 @@ export class TransformInterceptor<T>
     const response = ctx.getResponse<FastifyReply>();
 
     return next.handle().pipe(
-      map((data) => ({
-        statusCode: response.statusCode,
-        message: 'Request processed successfully',
-        data,
-        timestamp: new Date().toISOString(),
-      })),
+      map((data) => {
+        const statusCode = response.statusCode;
+
+        return {
+          success: statusCode >= 200 && statusCode < 300,
+          status: statusCode >= 200 && statusCode < 300,
+          statusCode,
+          message: 'Request processed successfully',
+          data,
+          timestamp: new Date().toISOString(),
+        };
+      }),
     );
   }
 }

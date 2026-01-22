@@ -18,15 +18,13 @@ import { ThrottleModule } from './common/throttler/throttler.module';
 import { TasksModule } from './infrastructure/job/task.module';
 import { GroupModule } from './modules/group/group.module';
 import { DLQModule } from './modules/dlq/dlq.module';
-import { vedaDatabaseConfig } from './infrastructure/config/veda-database.config';
-import { VedaDatabaseModule } from './infrastructure/database/veda-database.module';
 
 @Module({
   imports: [
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig,vedaDatabaseConfig],
+      load: [databaseConfig],
       envFilePath: '.env',
     }),
 
@@ -35,7 +33,6 @@ import { VedaDatabaseModule } from './infrastructure/database/veda-database.modu
 
     // Database
     DatabaseModule,
-    VedaDatabaseModule,
 
     // Common utilities
     SocketModule,

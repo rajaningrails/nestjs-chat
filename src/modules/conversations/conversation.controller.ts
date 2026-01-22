@@ -16,7 +16,7 @@ export class ConversationController {
     private readonly conversationRepository: ConversationRepository,
   ) {}
 
-  @Get('latest-conversation')
+  @Get('latest-conversations')
   async findAll(
     @Query('limit', new ParseIntPipe({ optional: true })) limit = 10,
     @Query('page', new ParseIntPipe({ optional: true })) page = 1,

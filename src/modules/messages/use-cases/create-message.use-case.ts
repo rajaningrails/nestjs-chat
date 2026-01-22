@@ -49,11 +49,15 @@ export class CreateMessageUseCase {
         school_id: request.school_id,
         type: request.sender_user_type,
         user_id: request.sender_id,
+        image: request.sender_image,
+        name: request.sender_name
       },
       {
         school_id: request.school_id,
         type: request.receiver_user_type,
         user_id: request.receiver_id,
+        image: request.receiver_image,
+        name: request.receiver_name
       },
     ];
     await this.userRepository.upsertUsers(payloadUsers);

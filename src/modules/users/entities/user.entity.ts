@@ -24,6 +24,12 @@ export class User {
   @Column({ type: 'int', unique: true })
   user_id: number;
 
+  @Column({type: 'text'})
+  name: string;
+  
+  @Column({type: 'text'})
+  image: string;
+
   @Column({type: 'enum', enum: UserType})
   type: UserType;
   

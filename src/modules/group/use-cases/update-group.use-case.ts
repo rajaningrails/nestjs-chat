@@ -32,6 +32,8 @@ export class UpdateGroupUseCase {
         user_id: m.id,
         school_id: school_id,
         type: m.type,
+        image: m.image,
+        name: m.name
       }));
       await this.userRepository.upsertUsers(usersToCreate);
     }

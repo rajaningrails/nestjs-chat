@@ -40,7 +40,7 @@ async function bootstrap() {
   await app.register(require('@fastify/multipart'));
 
   // Global prefix
-  app.setGlobalPrefix('api');
+  // app.setGlobalPrefix('api');
 
   app.enableShutdownHooks();
 

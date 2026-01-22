@@ -47,7 +47,7 @@ export class MessageController {
     return this.seenMessageUseCase.execute(dto);
   }
 
-  @Post('delete')
+  @Post('deleteMessage')
   async deleteMessage(@Body() request: DeleteMessageDto) {
     return this.deleteMessageUseCase.execute(request);
   }

@@ -7,6 +7,7 @@ import {
   IsArray,
   IsNumber,
   IsDate,
+  IsNumberString,
 } from 'class-validator';
 
 export class SendMessageDto {
@@ -14,23 +15,23 @@ export class SendMessageDto {
   @IsOptional()
   id: number;
 
-  @IsInt()
+  @IsNumberString()
   @IsNotEmpty()
   school_id: number;
 
-  @IsInt()
+  @IsNumberString()
   @IsNotEmpty()
   sender_id: number;
 
-  @IsNumber()
+  @IsNumberString()
   @IsNotEmpty()
   conversation_id: number;
 
-  @IsInt()
+  @IsNumberString()
   @IsOptional()
   receiver_id: number;
 
-  @IsInt()
+  @IsNumberString()
   @IsOptional()
   group_id: number;
 

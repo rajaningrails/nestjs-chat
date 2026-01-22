@@ -55,21 +55,21 @@ export class MessageRepository implements IMessageRepository {
   }
 
   async getConversationMessages(
-    conversation_id: number,
-    limit = 25,
-    offset = 0,
-  ): Promise<Message[]> {
-    return await this.messageRepository
-      .createQueryBuilder('m')
-      .leftJoinAndSelect('m.sender', 'sender')
-      .leftJoinAndSelect('m.receiver', 'receiver')
-      .leftJoinAndSelect('m.attachments', 'attachments')
-      .where('m.conversation_id = :conversation_id', { conversation_id })
-      .orderBy('m.created_at', 'DESC')
-      .take(limit)
-      .skip(offset)
-      .getMany();
-  }
+      conversation_id: number,
+      limit = 25,
+      offset = 0,
+    ): Promise<Message[]> {
+      return this.messageRepository.find({
+        where: { 
+          conversation_id: Number(conversation_id) 
+        },
+        relations: ['sender', 'receiver', 'group'],
+        take: limit,
+        skip: offset,
+        order: { created_at: 'DESC' },
+        withDeleted: true
+      });
+    }
 
   async upsertBatch(messages: Message[]): Promise<void> {
     if (!messages.length) return;

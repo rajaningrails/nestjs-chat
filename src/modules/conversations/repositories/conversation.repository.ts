@@ -257,14 +257,16 @@ export class ConversationRepository implements IConversationRepository {
           END as other_user_id,
           u.name as other_user_name,
           u.image as other_user_profile_image,
+          u.type as other_user_type,
           CASE 
             WHEN c.type = ? THEN 
               CASE WHEN seen.id IS NOT NULL THEN true ELSE false END
             ELSE NULL
           END as is_seen,
           m.message as last_message,
-          m.attachments as last_attachments,
-          m.created_at as last_message_created_at
+          m.attachments as last_message_attachments,
+          m.created_at as last_message_created_at,
+          m.deleted_at as last_message_delete_at
         FROM conversations c
         LEFT JOIN chat_groups g ON c.group_id = g.id
         LEFT JOIN chat_group_members gm ON g.id = gm.group_id
@@ -343,41 +345,41 @@ export class ConversationRepository implements IConversationRepository {
 
       const processedConversations = conversations.map((conv) => ({
         id: conv.id,
-        school_id: conv.school_id,
         type: conv.type,
+        school_id: conv.school_id,
+        sender_id: conv.last_message_sender_id,
+        receiver_id: conv.last_message_receiver_id,
         group_id: conv.group_id,
         group_type: conv.group_type,
-        last_message_id: conv.last_message_id,
-        last_message_sender_id: conv.last_message_sender_id,
-        last_message_receiver_id: conv.last_message_receiver_id,
         created_at: conv.created_at,
         updated_at: conv.updated_at,
-        lastMessage: conv.last_message_id
-          ? {
-              id: conv.last_message_id,
-              content: conv.last_message_content,
-              created_at: conv.last_message_created_at,
-            }
-          : null,
-        group: conv.group_id
-          ? {
-              id: conv.group_id,
-              name: conv.group_name,
-              image: conv.group_image,
-              type: conv.group_type_name,
-            }
-          : null,
-        other_user_id:
+        last_message_id: conv.last_message_id,
+        last_message: conv.last_message,
+        last_message_sender_id: conv.last_message_sender_id,
+        last_message_receiver_type: conv.other_user_type,
+        last_message_seen_at: conv.last_message_seen_at,
+        last_message_date: conv.last_message_created_at,
+        is_only_teachers_group: conv.group_type,
+        is_online: true,
+        group_name: conv.group_name,
+        group_image: conv.group_image,
+        group_creator_id: conv.created_by,
+        attachments: conv.last_message_attachments,
+        is_muted: 0,
+        muted_by_ids: null,
+        deleteMessageFlag: conv.last_message_delete_at ? 0: 1,
+        user_id:
           conv.type === ConversationType.USER ? conv.other_user_id : null,
-        other_user:
+        user_details:
           conv.type === ConversationType.USER && conv.other_user_id
             ? {
                 id: conv.other_user_id,
                 name: conv.other_user_name,
-                profile_image: conv.other_user_profile_image,
+                image: conv.other_user_profile_image,
+                class: null,
+                section: null
               }
-            : null,
-        is_seen: conv.is_seen,
+            : null
       }));
 
       const idListRows = processedConversations
@@ -416,8 +418,8 @@ export class ConversationRepository implements IConversationRepository {
       const conversation_exists = await this.conversationRepository.findOne({
         where: {
           id: conversation_id,
-          deleted_at: IsNull(),
         },
+        withDeleted: false
       });
 
       if (!conversation_exists) {

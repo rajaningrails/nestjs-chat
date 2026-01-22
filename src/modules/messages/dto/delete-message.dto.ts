@@ -1,20 +1,20 @@
-import { IsIn, IsInt, IsNumber, IsOptional } from 'class-validator';
+import { IsIn, IsInt, IsNumber, IsNumberString, IsOptional } from 'class-validator';
 
 export class DeleteMessageDto {
-  @IsNumber()
+  @IsNumberString()
   messageId: number;
 
-  @IsNumber()
+  @IsNumberString()
   conversationID: number;
 
-  @IsInt()
+  @IsNumberString()
   @IsOptional()
   receiverID: number;
 
-  @IsInt()
+  @IsNumberString()
   senderID: number;
 
-  @IsInt()
+  @IsNumberString()
   @IsOptional()
   groupID: number;
 }

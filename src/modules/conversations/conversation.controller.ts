@@ -33,10 +33,17 @@ export class ConversationController {
     );
   }
 
-  @Get('/conversation-info')
+  @Get('conversation')
   async findOne(
+    @Query('id') conversation_id: number,
+  ) {
+    return this.conversationRepository.getConversationMessages(conversation_id);
+  }
+
+  @Get('conversation-info')
+  async find(
     @Query('conversation_id') conversation_id: number,
-  ): Promise<Conversation | null> {
+  ) {
     return this.conversationRepository.findById(conversation_id);
   }
 

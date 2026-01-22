@@ -10,6 +10,7 @@ import { generateSafeNumericId } from 'src/utils/helpers';
 import { UsersService } from 'src/modules/users/services/users.service';
 import { ConversationService } from 'src/modules/conversations/services/conversation.service';
 import { SendMessageDto } from '../dto/send-message.dto';
+import { MessageGateway } from '../gateway/message.gateway';
 
 @Injectable()
 export class SendMessageUseCase {
@@ -17,7 +18,8 @@ export class SendMessageUseCase {
     private readonly conversationService: ConversationService,
     private readonly userService: UsersService,
     private readonly messagesService: MessageService,
-  ) {}
+    private readonly messageGateway: MessageGateway
+  ) { }
 
   async execute(request: SendMessageDto) {
     if (request.message && request.message.trim().length > 0) {
@@ -46,7 +48,7 @@ export class SendMessageUseCase {
     const sender_user_details = await this.userService.findUserById(
       request.sender_id,
     );
-
+    await this.messageGateway.emitNewMessage(messageData.conversation_id, messageData.message, messageData.sender_id, messageData.receiver_id, messageData.group_id)
     return {
       messageId: messageData.id,
       message_sent: messageData.message,

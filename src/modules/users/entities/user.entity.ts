@@ -27,11 +27,17 @@ export class User {
   @Column({type: 'text'})
   name: string;
   
-  @Column({type: 'text'})
+  @Column({type: 'text', nullable: true})
   image: string;
 
   @Column({type: 'enum', enum: UserType})
   type: UserType;
+
+  @Column({type:'text', nullable: true})
+  class: string;
+
+  @Column({type:"text", nullable: true})
+  section: string;
   
   @CreateDateColumn()
   created_at: Date;

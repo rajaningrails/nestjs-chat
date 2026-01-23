@@ -31,7 +31,7 @@ export class UserRepository implements IUserRepository {
     return this.findByUserId(userData.user_id);
   }
 
-  async upsertUsers(users: CreateUserDto[]): Promise<void> {
+  async upsertUsers(users: Partial<CreateUserDto>[]): Promise<void> {
     if (!users.length) return;
   
     await this.userRepository
@@ -40,7 +40,7 @@ export class UserRepository implements IUserRepository {
       .into(User)
       .values(users)
       .orUpdate(
-        ['school_id', 'type'],   
+        ['type','image', 'name','class', 'section'],   
         ['user_id'],             
       )
       .updateEntity(false)       

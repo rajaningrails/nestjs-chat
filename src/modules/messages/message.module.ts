@@ -22,9 +22,9 @@ import { ConversationsModule } from '../conversations/conversations.module';
   imports: [
     TypeOrmModule.forFeature([Message, User, Conversation]),
     messageQueueConfig,
-    forwardRef(() => ConversationsModule), // Already has forwardRef - good!
-    forwardRef(() => GroupModule), // Already has forwardRef - good!
-    UsersModule
+    forwardRef(() => ConversationsModule),
+    forwardRef(() => GroupModule),
+    UsersModule,
   ],
   controllers: [MessageController],
   providers: [

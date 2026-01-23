@@ -20,7 +20,7 @@ export class UserController {
     return user;
   }
 
-  @Post('update')
+  @Post('sync-user')
   async update(@Body() updateUserDto: UpdateUserDto): Promise<User> {
     const user = await this.updateUserUseCase.execute(updateUserDto);
     return user!;
@@ -32,5 +32,4 @@ export class UserController {
     return user;
   }
 
-  
 }

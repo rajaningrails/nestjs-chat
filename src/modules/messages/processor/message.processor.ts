@@ -13,6 +13,8 @@ import { MessageDto } from '../dto/message.dto';
 import { SendMessageDto } from '../dto/send-message.dto';
 import { GroupService } from 'src/modules/group/service/group.service';
 import { ConversationService } from 'src/modules/conversations/services/conversation.service';
+import { UsersService } from 'src/modules/users/services/users.service';
+import { UpdateUserDto } from 'src/modules/users/dto/update-user.dto';
 
 @Processor(MessageProcessorConfig.queue_name, {
   concurrency: MessageProcessorConfig.no_of_jobs,
@@ -31,12 +33,14 @@ export class MessageProcessor
   private readonly CREATE_BUFFER_KEY = 'buffer:message:create';
   private readonly DELETE_BUFFER_KEY = 'buffer:message:delete';
   private readonly UPDATE_BUFFER_KEY = 'buffer:message:update';
+  private readonly UPDATE_USER_BUFFER_KEY = 'buffer:user:update';
   private readonly USER_SEEN_BUFFER_KEY = 'buffer:message:user-seen';
   private readonly GROUP_SEEN_BUFFER_KEY = 'buffer:group-message-seen:create';
   private readonly CONVERSATION_UPDATE_BUFFER_KEY = 'buffer:conversation:update';
   
   private readonly CREATE_LOCK_KEY = 'lock:message:create:flush';
   private readonly UPDATE_LOCK_KEY = 'lock:message:update:flush';
+  private readonly UPDATE_USER_LOCK_KEY = 'lock:user:update:flush';
   private readonly DELETE_LOCK_KEY = 'lock:message:delete:flush';
   private readonly USER_SEEN_LOCK_KEY = 'lock:message:user-seen:flush';
   private readonly GROUP_SEEN_LOCK_KEY = 'lock:member:group-message-seen:flush';
@@ -55,6 +59,7 @@ export class MessageProcessor
     private readonly messageRepository: MessageRepository,
     private readonly groupService: GroupService,
     private readonly conversationService: ConversationService,
+    private readonly userService: UsersService
   ) {
     super();
   }
@@ -66,13 +71,14 @@ export class MessageProcessor
       if (this.isShuttingDown) return;
       
       try {
-        const [createLen, updateLen, deleteLen, userSeenLen, conversationUpdateLen, groupSeenLen] = await Promise.all([
+        const [createLen, updateLen, deleteLen, userSeenLen, conversationUpdateLen, groupSeenLen, syncUserLen] = await Promise.all([
           this.redis.llen(this.CREATE_BUFFER_KEY),
           this.redis.hlen(this.UPDATE_BUFFER_KEY),
           this.redis.scard(this.DELETE_BUFFER_KEY),
           this.redis.scard(this.USER_SEEN_BUFFER_KEY),
           this.redis.hlen(this.CONVERSATION_UPDATE_BUFFER_KEY),
-          this.redis.llen(this.GROUP_SEEN_BUFFER_KEY)
+          this.redis.llen(this.GROUP_SEEN_BUFFER_KEY),
+          this.redis.hlen(this.UPDATE_USER_BUFFER_KEY)
         ]);
 
         const flushPromises: Promise<void>[] = [];
@@ -82,6 +88,7 @@ export class MessageProcessor
         if (deleteLen > 0) flushPromises.push(this.flushDeleteBuffer());
         if (userSeenLen > 0) flushPromises.push(this.flushUserMessageSeen());
         if (groupSeenLen > 0) flushPromises.push(this.flushGroupMessageSeen());
+        if (syncUserLen > 0) flushPromises.push(this.flushUserSync());
         if (flushPromises.length > 0) {
           await Promise.all(flushPromises);
         }
@@ -116,6 +123,8 @@ export class MessageProcessor
           return await this.bufferOneToOneSeen(data);
         case 'group-message-seen':
           return await this.bufferGroupSeen(data);
+        case 'user-sync':
+          return await this.bufferUserSync(data);
         default:
           throw new Error(`Unknown job type: ${name}`);
       }
@@ -239,6 +248,57 @@ export class MessageProcessor
     }
 
     return { success: true, buffered: true, operation: 'group-message-seen' };
+  }
+
+  private async bufferUserSync(data: UpdateUserDto) {
+    await this.redis.lpush(this.UPDATE_USER_BUFFER_KEY, JSON.stringify(data));
+
+    const count = await this.redis.llen(this.UPDATE_USER_BUFFER_KEY);
+
+    if (count >= this.BATCH_SIZE) {
+      this.flushUserSync().catch((err) =>
+        this.logger.error('Async flush failed', err),
+      );
+    }
+
+    return { success: true, buffered: true, operation: 'group-message-seen' };
+  }
+
+  private async flushUserSync() {
+    const lockAcquired = await this.redis.set(
+      this.UPDATE_USER_LOCK_KEY,
+      Date.now().toString(),
+      'PX',
+      this.LOCK_TTL,
+      'NX',
+    );
+
+    if (!lockAcquired) {
+      return;
+    }
+
+    try {
+      const result = await this.redis
+        .multi()
+        .lrange(this.UPDATE_USER_BUFFER_KEY, 0, -1)
+        .del(this.UPDATE_USER_BUFFER_KEY)
+        .exec();
+
+      const rawData = result?.[0]?.[1] as string[];
+
+      if (!rawData || rawData.length === 0) {
+        return;
+      }
+
+      const batch = rawData.map((item) => JSON.parse(item));
+      try {
+        await this.userService.upsertUserBatch(batch);
+      } catch (error) {
+        await this.moveToDLQ('user-sync', batch, error);
+      }
+    } finally {
+      await this.redis.del(this.UPDATE_USER_LOCK_KEY);
+    }
   }
 
   private async flushGroupMessageSeen() {
@@ -603,7 +663,7 @@ export class MessageProcessor
   }
 
   private async moveToDLQ(
-    operation: 'create' | 'update' | 'delete' | 'one-to-one-seen' | 'group-message-seen' | 'conversation-update',
+    operation: 'create' | 'update' | 'delete' | 'one-to-one-seen' | 'group-message-seen' | 'conversation-update' | 'user-sync',
     data: any[],
     error: any,
   ) {
@@ -643,7 +703,8 @@ export class MessageProcessor
         this.flushUpdateBuffer(),
         this.flushDeleteBuffer(),
         this.flushUserMessageSeen(),
-        this.flushGroupMessageSeen()
+        this.flushGroupMessageSeen(),
+        this.flushUserSync()
       ]);
       
       await this.flushConversationUpdateBuffer();

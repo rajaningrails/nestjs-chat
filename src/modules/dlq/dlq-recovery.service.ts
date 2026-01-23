@@ -49,6 +49,13 @@ export class DLQRecoveryService implements OnModuleInit {
       retryDelay: 30000,
       backoffMultiplier: 2,
     },
+    user:{
+      repository: 'UserRepository',
+      operations: ['user-sync'],
+      maxRetries: 3,
+      retryDelay: 30000,
+      backoffMultiplier: 2,
+    }
   };
 
   private readonly PERMANENT_FAILURE_KEY = 'dlq:permanent_failures';
@@ -163,6 +170,7 @@ export class DLQRecoveryService implements OnModuleInit {
       'one-to-one-seen': 'oneToOneChatMessageSeenBatch',
       'group-message-seen': 'groupMessageSeenBatch',
       'conversation-update': 'updateBatch',
+      'user-sync': 'upsertUsers',
     };
 
     const methodName = operationMap[operation];

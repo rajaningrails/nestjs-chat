@@ -30,14 +30,14 @@ export class GroupService {
   }) {
     await this.userRepository.upsertUsers(payload.users);
     const groupResponse = await this.groupRepository.create(payload.group);
-    const message_id = generateSafeNumericId();
     const { id: conversation_id } = await this.conversationRepository.save({
       school_id: payload.group.school_id,
-      group_id: groupResponse?.id,
+      group_id: groupResponse.id,
       type: ConversationType.GROUP,
       last_message_sender_id: payload?.group?.created_by,
       group_type: payload?.group_type,
     });
+    const message_id = generateSafeNumericId();
     await this.messageRepository.save({
       message: 'New group has been created',
       conversation_id,

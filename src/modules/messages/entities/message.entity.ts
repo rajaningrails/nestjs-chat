@@ -70,11 +70,11 @@ export class Message {
   @JoinColumn({ name: 'sender_id', referencedColumnName: 'user_id' })
   sender: User;
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'receiver_id', referencedColumnName: 'user_id' })
   receiver?: User;
 
-  @ManyToOne(() => ChatGroup)
+  @ManyToOne(() => ChatGroup, { nullable: true })
   @JoinColumn({ name: 'group_id', referencedColumnName: 'id' })
   group?: ChatGroup;
 

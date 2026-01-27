@@ -21,34 +21,39 @@ export class SendMessageUseCase {
     private readonly messageGateway: MessageGateway
   ) { }
 
-  async execute(request: SendMessageDto) {
+  async execute(request: Partial<SendMessageDto>) {
     if (request.message && request.message.trim().length > 0) {
       if (profanity.exists(request.message)) {
         throw new BadRequestException('Profanity not allowed');
       }
     }
     const existingConversation = await this.conversationService.findById(
-      request.conversation_id,
+      request.conversation_id!,
     );
     if (!existingConversation) {
       throw new NotFoundException('Conversation does not exists');
     }
     const messageData: MessageDto = {
       id: generateSafeNumericId(),
-      conversation_id: request.conversation_id,
-      sender_id: request.sender_id,
-      receiver_id: request.receiver_id,
+      conversation_id: request.conversation_id!,
+      sender_id: request.sender_id!,
+      receiver_id: !existingConversation.group_id ? request.receiver_id : undefined,
       message: request.message,
-      school_id: request.school_id,
+      school_id: request.school_id!,
       attachments: request.attachments,
-      group_id: request.group_id,
+      group_id: existingConversation.group_id,
     };
+
+    if(existingConversation.group_id || !request.receiver_id){
+      delete messageData.receiver_id
+    }
+    
     await this.messagesService.createMessage(messageData);
 
     const sender_user_details = await this.userService.findUserById(
-      request.sender_id,
+      request.sender_id!,
     );
-    await this.messageGateway.emitNewMessage(messageData.conversation_id, messageData.message, messageData.sender_id, messageData.receiver_id, messageData.group_id)
+    // await this.messageGateway.emitNewMessage(messageData.conversation_id, messageData.message, messageData.sender_id, messageData.receiver_id, messageData.group_id)
     return {
       messageId: messageData.id,
       message_sent: messageData.message,

@@ -5,6 +5,7 @@ import {
   Query,
   ParseIntPipe,
   Delete,
+  Post,
 } from '@nestjs/common';
 import { ConversationRepository } from './repositories/conversation.repository';
 import { Conversation } from './entities/conversation.entity';
@@ -66,7 +67,7 @@ export class ConversationController {
     );
   }
 
-  @Delete(':id')
+  @Post(':id')
   async remove(@Param('id') id: number) {
     return this.conversationRepository.softDelete(id);
   }

@@ -1,9 +1,9 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsEmail, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsEmail, IsInt, IsNotEmpty, IsNumber, IsNumberString, IsOptional, IsPositive, IsString, ValidateNested } from 'class-validator';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
 
 export class PartialCreateUserDto{
-  @IsInt()
+  @IsNumberString()
   @IsNotEmpty({ message: 'users id is required' })
   id: number;
 
@@ -25,7 +25,7 @@ export class PartialCreateUserDto{
 }
 
 export class CreateChatGroupDto {
-  @IsInt()
+  @IsNumberString()
   @IsNotEmpty({ message: 'school_id is required' })
   school_id: number;
 
@@ -37,7 +37,7 @@ export class CreateChatGroupDto {
   @IsOptional()
   group_image: string;
 
-  @IsNumber()
+  @IsNumberString()
   @IsNotEmpty({ message: 'created by is required' })
   created_by: number;
 
@@ -87,4 +87,12 @@ export class UpdateGroupDto {
   @Type(() => PartialCreateUserDto)
   @IsOptional()
   staffDetails?: PartialCreateUserDto[];
+}
+
+
+export class GetGroupDto {
+  @Type(() => Number)
+  @IsInt()
+  @IsPositive()
+  group_id: number;
 }

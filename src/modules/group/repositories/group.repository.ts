@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
 import { ChatGroup } from '../entities/chat-group.entity';
@@ -80,7 +80,7 @@ export class GroupRepository implements IGroupRepository {
     return !!existingGroup;
   }
 
-  async create(data: CreateChatGroupDto) {
+  async create(data: CreateChatGroupDto): Promise<ChatGroup> {
     const { school_id, group_name, created_by, group_image } = data;
 
     const group = this.groupRepo.create({
@@ -205,16 +205,15 @@ export class GroupRepository implements IGroupRepository {
   }
 
   async getGroupNamesByUserId(
-    school_id: number,
-    user_id: number,
+    group_id: number,
   ): Promise<ChatGroup[] | null> {
-    if (!user_id || !school_id) {
-      return null;
+    console.log({group_id})
+    if (!group_id || Number(group_id)) {
+      throw new NotFoundException("Group not found");
     }
     const groups = await this.groupRepo.find({
       where: {
-        school_id,
-        members: { user_id },
+        id: group_id,
       },
       withDeleted: false,
       relations: ['members', 'members.user'],

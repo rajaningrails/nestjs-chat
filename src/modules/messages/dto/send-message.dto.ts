@@ -27,13 +27,13 @@ export class SendMessageDto {
   @IsNotEmpty()
   conversation_id: number;
 
-  @IsNumberString()
   @IsOptional()
-  receiver_id: number;
+  @IsNumberString()
+  receiver_id?: number;
 
-  @IsNumberString()
   @IsOptional()
-  group_id: number;
+  @IsNumberString()
+  group_id?: number;
 
   @ValidateIf((o) => !o.attachments || o.attachments.length === 0)
   @IsString()

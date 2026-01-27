@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { CreateGroupUseCase } from './use-cases/create-group.use-case';
 import { UpdateGroupUseCase } from './use-cases/update-group.use-case';
-import { CreateChatGroupDto, UpdateGroupDto } from './dto/chat-group.dto';
+import { CreateChatGroupDto, GetGroupDto, UpdateGroupDto } from './dto/chat-group.dto';
 import { ChatGroup } from './entities/chat-group.entity';
 import { GroupRepository } from './repositories/group.repository';
 import { IGroupRepositoryToken } from './repositories/group.repository.interface';
@@ -45,14 +45,13 @@ export class GroupController {
 
   @Get('getGroupNamesByUserId')
   async getGroupNamesByUserId(
-    @Query('school_id') school_id: number,
-    @Query('user_id') user_id: number,
+    @Query() query: GetGroupDto
   ): Promise<ChatGroup[] | null> {
-    return this.groupRepository.getGroupNamesByUserId(school_id, user_id);
+    return this.groupRepository.getGroupNamesByUserId(query.group_id);
   }
 
   @Get(':id')
-  async findById(@Param('id') id: number): Promise<ChatGroup | null> {
+  async findById(@Param('id') id: GetGroupDto['group_id']): Promise<ChatGroup | null> {
     return this.groupRepository.findByIdWithGroupMembers(id);
   }
 

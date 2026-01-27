@@ -39,7 +39,6 @@ export class ConversationRepository implements IConversationRepository {
           'last_message_id',
           'last_message_sender_id',
           'last_message_receiver_id',
-          'group_id',
           'updated_at'
         ],
         ['id'],
@@ -460,7 +459,7 @@ export class ConversationRepository implements IConversationRepository {
 
       return {
         message: 'Messages retrieved successfully',
-        data: formattedMessages.reverse(),
+        data: formattedMessages,
         currentPage: page,
         hasMore,
         totalPages,

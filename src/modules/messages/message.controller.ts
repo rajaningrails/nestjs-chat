@@ -33,7 +33,7 @@ export class MessageController {
 
   @SkipThrottle()
   @Post('send-message')
-  async sendMessage(@Body() dto: SendMessageDto) {
+  async sendMessage(@Body() dto: Partial<SendMessageDto>) {
     return this.sendMessageUseCase.execute(dto);
   }
 

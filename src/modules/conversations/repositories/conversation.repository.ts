@@ -267,7 +267,8 @@ export class ConversationRepository implements IConversationRepository {
           m.message as last_message,
           m.attachments as last_message_attachments,
           m.created_at as last_message_created_at,
-          m.deleted_at as last_message_delete_at
+          m.deleted_at as last_message_delete_at,
+          m.seen_at as last_message_seen_at
         FROM conversations c
         LEFT JOIN chat_groups g ON c.group_id = g.id
         LEFT JOIN chat_group_members gm ON g.id = gm.group_id

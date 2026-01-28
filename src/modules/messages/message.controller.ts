@@ -42,7 +42,7 @@ export class MessageController {
     return this.createMessageUseCase.execute(dto);
   }
 
-  @Post('seen')
+  @Post('update-seen-at')
   async markAsSeen(@Body() dto: SeenMessageDto) {
     return this.seenMessageUseCase.execute(dto);
   }

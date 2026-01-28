@@ -80,7 +80,11 @@ export class MessageGateway
         socketId: client.id,
         timestamp: new Date(),
       });
-      
+
+      this.socketService.broadcast('userOnline', {
+        senderId: userId
+      })
+
     } catch (error) {
       this.logger.error('Connection handling error:', error);
       client.disconnect();
@@ -102,6 +106,10 @@ export class MessageGateway
       if (!isStillOnline) {
         await this.presenceService.setOffline(userId);
       }
+        
+      this.socketService.broadcast('userOffline', {
+        senderId: userId
+      })
 
       this.logger.log(`👋 User ${userId} disconnected (socket: ${client.id})`);
     } catch (error) {
@@ -159,15 +167,13 @@ export class MessageGateway
       };
 
       if (data.group_id) {
-        // Group chat - emit to all group members except sender
         await this.socketService.emitToGroupMembers(
           data.group_id,
           'typing',
           typingData,
-          userId, // exclude sender
+          userId,
         );
       } else if (data.receiver_id) {
-        // One-to-one chat - emit to receiver only
         await this.socketService.emitToUser(
           data.receiver_id,
           'typing',
@@ -176,75 +182,6 @@ export class MessageGateway
       }
     } catch (error) {
       this.logger.error('Failed to handle typing indicator:', error);
-    }
-  }
-
-  @SubscribeMessage('mark-seen')
-  async handleMarkSeen(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: {
-      message_id: number;
-      conversation_id: number;
-      group_id?: number;
-      sender_id?: number;
-      receiver_id?: number
-    },
-  ) {
-    const userId = client.userId;
-
-    if (!userId) return;
-
-    try {
-      if (data?.group_id) {
-        await this.messageService.groupChatMessageSeen({
-          conversationID: data.conversation_id,
-          groupID: data.group_id,
-          messageId: data.message_id,
-          senderID: data.sender_id!,
-        });
-
-        // Emit to all group members including the one who marked it seen
-        await this.socketService.emitToGroupMembers(
-          data.group_id,
-          'message-seen',
-          {
-            conversation_id: data.conversation_id,
-            message_id: data.message_id,
-            seen_by: userId,
-            timestamp: new Date(),
-          },
-        );
-      } else {
-        await this.messageService.oneToOneChatMessageSeen({
-          conversationID: data.conversation_id,
-          messageId: data.message_id,
-          senderID: data.sender_id!,
-          receiverID: data.receiver_id!,
-        });
-
-        // Emit to both sender and the one who marked it seen
-        const userIds = [userId];
-        if (data.sender_id && data.sender_id !== userId) {
-          userIds.push(data.sender_id);
-        }
-
-        await this.socketService.emitToUsers(
-          userIds,
-          'message-seen',
-          {
-            conversation_id: data.conversation_id,
-            message_id: data.message_id,
-            seen_by: userId,
-            timestamp: new Date(),
-          },
-        );
-      }
-    } catch (error) {
-      this.logger.error('Failed to handle mark-seen:', error);
-      client.emit('error', {
-        event: 'mark-seen',
-        error: 'Failed to mark message as seen',
-      });
     }
   }
 

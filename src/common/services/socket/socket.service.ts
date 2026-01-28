@@ -225,6 +225,34 @@ export class SocketService {
     }
   }
 
+  async broadcast(
+    event: string,
+    data: any,
+    batchSize: number = 80,
+  ): Promise<void> {
+    try {
+      const connectedUserIds = await this.getOnlineUsers();
+
+      if (connectedUserIds.length === 0) {
+        this.logger.warn('No users connected for broadcast');
+        return;
+      }
+
+      this.logger.log(`Broadcasting to ${connectedUserIds.length} users`);
+
+      for (let i = 0; i < connectedUserIds.length; i += batchSize) {
+        const batch = connectedUserIds.slice(i, i + batchSize);
+        await Promise.all(
+          batch.map((userId) => this.emitToUser(userId, event, data)),
+        );
+      }
+      this.logger.log(`Broadcast completed for event: ${event}`);
+    } catch (error) {
+      this.logger.error('Failed to broadcast to all users:', error);
+      throw error;
+    }
+  }
+
   /**
    * Emit to all members of a group
    * @param groupId - The group ID

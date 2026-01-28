@@ -6,11 +6,13 @@ import { ConversationRepository } from './repositories/conversation.repository';
 import { Conversation } from './entities/conversation.entity';
 import { ConversationService } from './services/conversation.service';
 import { MessageModule } from '../messages/message.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Conversation]),
-    forwardRef(() => MessageModule), // Add forwardRef here
+    forwardRef(() => MessageModule),
+    UsersModule
   ],
   controllers: [ConversationController],
   providers: [

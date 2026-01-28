@@ -1,20 +1,15 @@
-import { IsInt, IsNumber, IsOptional } from 'class-validator';
+import { IsInt, IsNumber, IsNumberString, IsOptional } from 'class-validator';
 
 export class SeenMessageDto {
-  @IsNumber()
-  messageId: number;
+  @IsNumberString()
+  id: number;
 
-  @IsNumber()
-  conversationID: number;
+  @IsNumberString()
+  conversation_id: number;
 
-  @IsInt()
-  @IsOptional()
-  receiverID?: number;
-
-  @IsInt()
-  senderID: number;
-
-  @IsInt()
-  @IsOptional()
-  groupID?: number;
+  @IsNumberString()
+  seen_update_sender_id: number;
+  
+  @IsNumberString()
+  seen_update_receiver_id: number;
 }

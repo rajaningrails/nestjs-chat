@@ -15,6 +15,9 @@ import { PresenceService } from 'src/common/services/socket/presence.service';
 import { ConversationService } from 'src/modules/conversations/services/conversation.service';
 import { TypingService } from 'src/common/services/socket/typing.service';
 import { MessageService } from '../services/message.service';
+import { MessageDto } from '../dto/message.dto';
+import { User } from 'src/modules/users/entities/user.entity';
+import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
 
 interface AuthenticatedSocket extends Socket {
   userId?: number;
@@ -31,8 +34,7 @@ interface AuthenticatedSocket extends Socket {
   pingTimeout: 60000,
 })
 export class MessageGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
-{
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
@@ -45,7 +47,7 @@ export class MessageGateway
     private readonly presenceService: PresenceService,
     private readonly conversationService: ConversationService,
     private readonly messageService: MessageService,
-  ) {}
+  ) { }
 
   afterInit(server: Server) {
     this.socketService.setServer(server);
@@ -65,7 +67,6 @@ export class MessageGateway
       const success = await this.socketService.addUserSocket(userId, client.id);
 
       if (!success) {
-        this.logger.error(`Failed to register socket for user ${userId}`);
         client.disconnect();
         return;
       }
@@ -79,8 +80,7 @@ export class MessageGateway
         socketId: client.id,
         timestamp: new Date(),
       });
-
-      this.logger.log(`✅ User ${userId} connected (socket: ${client.id})`);
+      
     } catch (error) {
       this.logger.error('Connection handling error:', error);
       client.disconnect();
@@ -137,8 +137,8 @@ export class MessageGateway
   @SubscribeMessage('typing')
   async handleTyping(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { 
-      conversation_id: number; 
+    @MessageBody() data: {
+      conversation_id: number;
       is_typing: boolean;
       group_id?: number;
       receiver_id?: number;
@@ -182,8 +182,8 @@ export class MessageGateway
   @SubscribeMessage('mark-seen')
   async handleMarkSeen(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { 
-      message_id: number; 
+    @MessageBody() data: {
+      message_id: number;
       conversation_id: number;
       group_id?: number;
       sender_id?: number;
@@ -202,7 +202,7 @@ export class MessageGateway
           messageId: data.message_id,
           senderID: data.sender_id!,
         });
-        
+
         // Emit to all group members including the one who marked it seen
         await this.socketService.emitToGroupMembers(
           data.group_id,
@@ -221,7 +221,7 @@ export class MessageGateway
           senderID: data.sender_id!,
           receiverID: data.receiver_id!,
         });
-        
+
         // Emit to both sender and the one who marked it seen
         const userIds = [userId];
         if (data.sender_id && data.sender_id !== userId) {
@@ -383,32 +383,92 @@ export class MessageGateway
   }
 
   async emitNewMessage(
-    conversationId: number,
-    message: any,
-    senderId: number,
-    receiverId?: number,
-    groupId?: number,
+    message: MessageDto,
+    sender_user_details: User,
+    receiver_user_details: User | null,
+    conversation: Conversation
   ) {
     try {
       const messageData = {
-        conversation_id: conversationId,
-        message,
-        timestamp: new Date(),
+        status: true,
+        message: 'Message sent successfully',
+        data: {
+          id: message.id,
+          message: message?.message || '',
+          attachments: message.attachments || [],
+          conversation_id: message.conversation_id,
+          seen_at: null,
+          delete_at: null,
+          not_show: 0,
+          sender_id: message.sender_id,
+          school_id: message.school_id,
+          receiver_id: message.receiver_id,
+          group_id: message.group_id,
+          chat_reply_id: null,
+          created_at: new Date(),
+          updated_at: new Date(),
+          receiver_image: receiver_user_details?.image,
+          isOnline: message?.receiver_id ? this.socketService.isUserOnline(message.receiver_id!) : false,
+          user_details: {
+            id: sender_user_details?.user_id?.toString(),
+            name: sender_user_details?.name,
+            image: sender_user_details?.image,
+            level: sender_user_details?.type,
+          },
+        }
       };
 
-      if (groupId) {
-        // Group message - emit to all group members including sender
+      const latestMessagePayload = {
+        id: message?.conversation_id,
+        user_id: message?.receiver_id,
+        school_id: message?.school_id,
+        sender_id: message?.sender_id,
+        receiver_id: message?.receiver_id,
+        type: conversation.type,
+        group_id: message.group_id,
+        created_at: new Date(),
+        updated_at: new Date(),
+        last_message_id: message?.id,
+        last_message_seen_at: null,
+        last_message_sender_id: message?.sender_id,
+        last_message_date: new Date(),
+        last_message: message?.message,
+        is_only_teachers_group: conversation.group_type,
+        last_message_receiver_type: receiver_user_details?.type,
+        attachments: message.attachments,
+        isOnline: message?.receiver_id ? this.socketService.isUserOnline(message.receiver_id!) : false,
+        is_online: message?.receiver_id ? this.socketService.isUserOnline(message.receiver_id!) : false,
+        group_name: '',
+        group_image: '',
+        user_details: {
+          id: sender_user_details?.user_id?.toString(),
+          name: sender_user_details?.name,
+          image: sender_user_details?.image,
+          level: sender_user_details?.type,
+        },
+      }
+
+      if (message?.group_id) {
         await this.socketService.emitToGroupMembers(
-          groupId,
+          message?.group_id,
           'message',
           messageData,
         );
-      } else if (receiverId) {
-        // One-to-one message - emit to both sender and receiver
+        await this.socketService.emitToGroupMembers(
+          message?.group_id,
+          'latestMessageIndividual',
+          latestMessagePayload,
+        );
+      } else if (message?.receiver_id) {
         await this.socketService.emitToUsers(
-          [senderId, receiverId],
+          [message.sender_id, message?.receiver_id],
           'message',
           messageData,
+        );
+        await this.socketService.emitToUsers(
+          [message.sender_id, message?.receiver_id],
+          'latestMessageIndividual',
+          latestMessagePayload,
         );
       }
     } catch (error) {
@@ -417,33 +477,27 @@ export class MessageGateway
   }
 
   async emitMessageDeleted(
-    conversationId: number,
-    messageId: number,
-    senderId: number,
-    receiverId?: number,
-    groupId?: number,
+    request: {
+      messageId: number,
+      receiverID: number,
+      senderID: number,
+      conversationID: number,
+      message_remover_name: string,
+      groupID: number
+    }
   ) {
     try {
-      const deleteData = {
-        conversation_id: conversationId,
-        message_id: messageId,
-        sender_id: senderId,
-        timestamp: new Date(),
-      };
-
-      if (groupId) {
-        // Group message deletion - emit to all group members including sender
+      if (request?.groupID) {
         await this.socketService.emitToGroupMembers(
-          groupId,
-          'message-deleted',
-          { ...deleteData, group_id: groupId },
+          request?.groupID,
+          'messageDeleted',
+          { ...request },
         );
-      } else if (receiverId) {
-        // One-to-one message deletion - emit to both sender and receiver
+      } else if (request?.receiverID) {
         await this.socketService.emitToUsers(
-          [senderId, receiverId],
-          'message-deleted',
-          deleteData,
+          [request?.senderID, request?.receiverID],
+          'messageDeleted',
+          request,
         );
       }
     } catch (error) {

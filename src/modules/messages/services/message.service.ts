@@ -5,11 +5,13 @@ import { MessageProcessorConfig } from 'src/infrastructure/bullmq/size-queue.con
 import { MessageDto } from '../dto/message.dto';
 import { Message } from '../entities/message.entity';
 import { SeenMessageDto } from '../dto/seen-message.dto';
+import { MessageRepository } from '../repositories/message.repository';
 
 @Injectable()
 export class MessageService {
   constructor(
     @InjectQueue(MessageProcessorConfig.queue_name) private messageQueue: Queue,
+    private readonly messageRepository: MessageRepository
   ) {}
 
   async createMessage(payload: MessageDto): Promise<Partial<Message>> {

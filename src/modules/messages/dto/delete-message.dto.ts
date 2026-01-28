@@ -1,4 +1,5 @@
-import { IsIn, IsInt, IsNumber, IsNumberString, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsInt, IsNumberString, IsOptional } from 'class-validator';
 
 export class DeleteMessageDto {
   @IsNumberString()
@@ -7,14 +8,11 @@ export class DeleteMessageDto {
   @IsNumberString()
   conversationID: number;
 
-  @IsNumberString()
   @IsOptional()
-  receiverID: number;
+  @IsInt()
+  @Type(() => Number)
+  receiverID?: number | null;
 
   @IsNumberString()
   senderID: number;
-
-  @IsNumberString()
-  @IsOptional()
-  groupID: number;
 }

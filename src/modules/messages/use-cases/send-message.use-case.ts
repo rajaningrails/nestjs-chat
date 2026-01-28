@@ -11,6 +11,7 @@ import { UsersService } from 'src/modules/users/services/users.service';
 import { ConversationService } from 'src/modules/conversations/services/conversation.service';
 import { SendMessageDto } from '../dto/send-message.dto';
 import { MessageGateway } from '../gateway/message.gateway';
+import { User } from 'src/modules/users/entities/user.entity';
 
 @Injectable()
 export class SendMessageUseCase {
@@ -44,16 +45,23 @@ export class SendMessageUseCase {
       group_id: existingConversation.group_id,
     };
 
-    if(existingConversation.group_id || !request.receiver_id){
+    if (existingConversation.group_id || !request.receiver_id) {
       delete messageData.receiver_id
     }
-    
+
     await this.messagesService.createMessage(messageData);
 
     const sender_user_details = await this.userService.findUserById(
       request.sender_id!,
     );
-    // await this.messageGateway.emitNewMessage(messageData.conversation_id, messageData.message, messageData.sender_id, messageData.receiver_id, messageData.group_id)
+
+    let receiver_user_details: User | null = null;
+    if (request.receiver_id) {
+      receiver_user_details = await this.userService.findUserById(
+        request.sender_id!,
+      );
+    }
+    await this.messageGateway.emitNewMessage(messageData, sender_user_details!, receiver_user_details, existingConversation)
     return {
       messageId: messageData.id,
       message_sent: messageData.message,

@@ -8,6 +8,7 @@ import { CreateConversationDto } from '../dto/create-conversation.dto';
 import { UpdateConversationDto } from '../dto/update-conversation.dto';
 import { ConversationType } from '../dto/conversations.enum';
 import { MessageRepository } from 'src/modules/messages/repositories/message.repository';
+import { SocketService } from 'src/common/services/socket/socket.service';
 
 @Injectable()
 export class ConversationRepository implements IConversationRepository {
@@ -15,6 +16,7 @@ export class ConversationRepository implements IConversationRepository {
     @InjectRepository(Conversation)
     private readonly conversationRepository: Repository<Conversation>,
     private readonly messageRepository: MessageRepository,
+    private readonly socketService: SocketService
   ) {}
 
   async findAll(limit = 20, offset = 0): Promise<Conversation[]> {
@@ -341,45 +343,45 @@ export class ConversationRepository implements IConversationRepository {
 
       const totalPages = Math.ceil(totalRecords / limit);
       const hasMore = page < totalPages;
-
-      const processedConversations = conversations.map((conv) => ({
-        id: conv.id,
-        type: conv.type,
-        school_id: conv.school_id,
-        sender_id: conv.last_message_sender_id,
-        receiver_id: conv.last_message_receiver_id,
-        group_id: conv.group_id,
-        group_type: conv.group_type,
-        created_at: conv.created_at,
-        updated_at: conv.updated_at,
-        last_message_id: conv.last_message_id,
-        last_message: conv.last_message,
-        last_message_sender_id: conv.last_message_sender_id,
-        last_message_receiver_type: conv.other_user_type,
-        last_message_seen_at: conv.last_message_seen_at,
-        last_message_date: conv.last_message_created_at,
-        is_only_teachers_group: conv.group_type,
-        is_online: true,
-        group_name: conv.group_name,
-        group_image: conv.group_image,
-        group_creator_id: conv.created_by,
-        attachments: conv.last_message_attachments,
-        is_muted: 0,
-        muted_by_ids: null,
-        deleteMessageFlag: conv.last_message_delete_at ? 0: 1,
-        user_id:
-          conv.type === ConversationType.USER ? conv.other_user_id : null,
-        user_details:
-          conv.type === ConversationType.USER && conv.other_user_id
-            ? {
-                id: conv.other_user_id,
-                name: conv.other_user_name,
-                image: conv.other_user_profile_image,
-                class: null,
-                section: null
-              }
-            : null
-      }));
+      const processedConversations = await Promise.all(
+        conversations.map(async (conv: any) => ({
+              id: conv.id,
+              type: conv.type,
+              school_id: conv.school_id,
+              sender_id: conv.last_message_sender_id,
+              receiver_id: conv.last_message_receiver_id,
+              group_id: conv.group_id,
+              group_type: conv.group_type,
+              created_at: conv.created_at,
+              updated_at: conv.updated_at,
+              last_message_id: conv.last_message_id,
+              last_message: conv.last_message,
+              last_message_sender_id: conv.last_message_sender_id,
+              last_message_receiver_type: conv.other_user_type,
+              last_message_seen_at: conv.last_message_seen_at,
+              last_message_date: conv.last_message_created_at,
+              is_only_teachers_group: conv.group_type,
+              is_online: conv.group_id ? false: await this.socketService.isUserOnline(conv?.other_user_id),
+              group_name: conv.group_name,
+              group_image: conv.group_image,
+              group_creator_id: conv.created_by,
+              attachments: conv.last_message_attachments,
+              is_muted: 0,
+              muted_by_ids: null,
+              deleteMessageFlag: conv.last_message_delete_at ? 0: 1,
+              user_id:
+                conv.type === ConversationType.USER ? conv.other_user_id : null,
+              user_details:
+                conv.type === ConversationType.USER && conv.other_user_id
+                  ? {
+                      id: conv.other_user_id,
+                      name: conv.other_user_name,
+                      image: conv.other_user_profile_image,
+                      class: null,
+                      section: null
+                    }
+                  : null
+        })));
 
       const idListRows = processedConversations
         .filter(

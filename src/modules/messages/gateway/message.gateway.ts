@@ -146,10 +146,10 @@ export class MessageGateway
   async handleTyping(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() data: {
-      conversation_id: number;
-      is_typing: boolean;
-      group_id?: number;
-      receiver_id?: number;
+      typing_state_conversation_id: number,
+      typing_state_sender_id: number,
+      typing_state_receiver_id: number,
+      typing_state_group_id: number,
     },
   ) {
     const userId = client.userId;
@@ -157,7 +157,7 @@ export class MessageGateway
     if (!userId) return;
 
     try {
-      await this.typingService.startTyping(data.conversation_id, userId);
+      await this.typingService.startTyping(data, userId);
 
       const typingData = {
         conversation_id: data.conversation_id,
@@ -236,7 +236,6 @@ export class MessageGateway
     groupData: any,
   ) {
     try {
-      // Emit to existing group members (excluding new members)
       await this.socketService.emitToGroupMembers(
         groupId,
         'member-added',
@@ -247,10 +246,9 @@ export class MessageGateway
           timestamp: new Date(),
         },
         undefined,
-        newMemberIds, // exclude new members from this event
+        newMemberIds, 
       );
 
-      // Emit to new members separately with full group data
       for (const memberId of newMemberIds) {
         await this.socketService.emitToUser(memberId, 'added-to-group', {
           conversation_id: conversationId,
@@ -271,7 +269,6 @@ export class MessageGateway
     removedBy: number,
   ) {
     try {
-      // Emit to remaining group members
       await this.socketService.emitToGroupMembers(
         groupId,
         'member-removed',
@@ -304,7 +301,6 @@ export class MessageGateway
     deletedBy: number,
   ) {
     try {
-      // Emit to all group members including the one who deleted it
       await this.socketService.emitToGroupMembers(
         groupId,
         'group-deleted',

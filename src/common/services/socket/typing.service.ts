@@ -7,28 +7,25 @@ import { Redis } from 'ioredis';
 export class TypingService {
   private readonly logger = new Logger(TypingService.name);
   private readonly TYPING_PREFIX = 'typing:';
-  private readonly TYPING_TIMEOUT_MS = 8000; // 8 seconds
   private readonly TYPING_TIMEOUT_SECONDS = 10; // Redis TTL
 
   constructor(
     private readonly redisService: RedisService,
     private readonly socketService: SocketService,
-  ) {}
+  ) { }
 
   private get redis(): Redis {
     return this.redisService.getClient();
   }
 
-  /**
-   * Start typing in a conversation
-   * For one-to-one: pass receiverId
-   * For group: pass groupId
-   */
+
   async startTyping(
-    conversationId: number,
-    userId: number,
-    receiverId?: number,
-    groupId?: number,
+    data: {
+      typing_state_conversation_id: number,
+      typing_state_sender_id: number,
+      typing_state_receiver_id: number,
+      typing_state_group_id: number,
+    }
   ): Promise<void> {
     try {
       const key = `${this.TYPING_PREFIX}${conversationId}`;
@@ -47,15 +44,13 @@ export class TypingService {
       };
 
       if (groupId) {
-        // Group chat - emit to all members except the typer
         await this.socketService.emitToGroupMembers(
           groupId,
           'user-typing',
           typingData,
-          userId, // exclude the user who is typing
+          userId,
         );
       } else if (receiverId) {
-        // One-to-one chat - emit only to the receiver
         await this.socketService.emitToUser(receiverId, 'user-typing', typingData);
       }
     } catch (error) {

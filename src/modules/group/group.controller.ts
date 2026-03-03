@@ -15,11 +15,7 @@ import { GroupRepository } from './repositories/group.repository';
 import { IGroupRepositoryToken } from './repositories/group.repository.interface';
 import { UserType } from '../users/dto/user-type.enum';
 
-interface IResponse {
-  conversation_id: number;
-  group_id: number;
-}
-@Controller('group')
+@Controller()
 export class GroupController {
   constructor(
     private readonly createGroupUseCase: CreateGroupUseCase,
@@ -29,13 +25,13 @@ export class GroupController {
     private readonly groupRepository: GroupRepository,
   ) {}
 
-  @Post('create')
+  @Post('group/create')
   async create(@Body() createGroupDto: CreateChatGroupDto) {
     const result = await this.createGroupUseCase.execute(createGroupDto);
     return result;
   }
 
-  @Post('update')
+  @Post('group/update')
   async update(
     @Body() updateGroupDto: UpdateGroupDto,
   ) {
@@ -50,8 +46,18 @@ export class GroupController {
     return this.groupRepository.getGroupNamesByUserId(query.group_id);
   }
 
-  @Get(':id')
-  async findById(@Param('id') id: GetGroupDto['group_id']): Promise<ChatGroup | null> {
+  @Get('getGroupDetailsByGroupId')
+  async findById(@Param('group_id') id: GetGroupDto['group_id']): Promise<ChatGroup | null> {
+    return this.groupRepository.findByIdWithGroupMembers(id);
+  }
+
+  // @Get('getGroupDetails')
+  // async findByConversationId(@Param('conversation_id') conversation_id: ): Promise<ChatGroup | null> {
+  //   return this.groupRepository.findByIdWithGroupMembers(id);
+  // }
+
+  @Get('manageGroup')
+  async getGroupMembersDetail(@Param('group_id') id: GetGroupDto['group_id']): Promise<ChatGroup | null> {
     return this.groupRepository.findByIdWithGroupMembers(id);
   }
 

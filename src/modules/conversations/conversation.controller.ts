@@ -1,10 +1,8 @@
 import {
   Controller,
   Get,
-  Param,
   Query,
   ParseIntPipe,
-  Delete,
   Post,
   NotFoundException,
   Body,
@@ -16,7 +14,7 @@ import { SocketService } from 'src/common/services/socket/socket.service';
 import { DeleteConversationDto } from './dto/conversation-delete.dto';
 import { UsersService } from '../users/services/users.service';
 
-@Controller('conversations')
+@Controller()
 export class ConversationController {
   constructor(
     private readonly conversationRepository: ConversationRepository,
@@ -41,12 +39,12 @@ export class ConversationController {
     );
   }
 
-  @Get('conversation')
-  async findOne(
-    @Query('id') conversation_id: number,
-  ) {
-    return this.conversationRepository.getConversationMessages(conversation_id);
-  }
+  // @Get('conversation')
+  // async findOne(
+  //   @Query('id') conversation_id: number,
+  // ) {
+  //   return this.conversationRepository.getConversationMessages(conversation_id);
+  // }
 
   @Get('conversation-info')
   async find(
@@ -74,12 +72,11 @@ export class ConversationController {
     );
   }
 
-  @Post(':id')
+  @Post('deleteAllMessages')
   async remove(
-    @Param('id', ParseIntPipe) id: number,
     @Body() request: DeleteConversationDto,
   ) {
-    const conversationExists = await this.conversationRepository.findById(id);
+    const conversationExists = await this.conversationRepository.findById(request.conversationID!);
 
     if (!conversationExists) {
       throw new NotFoundException('Conversation not found!');
@@ -91,7 +88,7 @@ export class ConversationController {
     }
 
     const messageData = {
-      conversationID: conversationExists.id,
+      conversationID: request.conversationID!,
       senderID: request.senderID,
       receiverID: request.receiverID,
       groupID: request.groupID,
@@ -99,7 +96,7 @@ export class ConversationController {
       senderImage: userDetail.image,
     };
 
-    await this.conversationRepository.softDelete(id);
+    await this.conversationRepository.softDelete(request.conversationID!);
     if (request.groupID) {
       await this.socketService.emitToGroupMembers(
         Number(request.groupID),
@@ -120,9 +117,9 @@ export class ConversationController {
     };
   }
 
-  @Get()
+  @Get('conversation')
   async getConversationMessages(
-    @Query('conversation_id') conversation_id: number,
+    @Query('id') conversation_id: number,
     @Query('limit', new ParseIntPipe({ optional: true })) limit = 25,
     @Query('offset', new ParseIntPipe({ optional: true })) page = 1,
   ) {

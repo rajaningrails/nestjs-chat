@@ -17,7 +17,7 @@ async function bootstrap() {
   );
 
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('PORT', 3000);
+  const port = configService.get<number>('PORT', 4001);
 
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
 

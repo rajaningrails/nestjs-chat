@@ -25,10 +25,11 @@ export class TypingService {
       typing_state_sender_id: number,
       typing_state_receiver_id: number,
       typing_state_group_id: number,
-    }
+    },
+    userId
   ): Promise<void> {
     try {
-      const key = `${this.TYPING_PREFIX}${conversationId}`;
+      const key = `${this.TYPING_PREFIX}${data?.typing_state_conversation_id}`;
 
       await this.redis
         .multi()
@@ -37,25 +38,25 @@ export class TypingService {
         .exec();
 
       const typingData = {
-        conversation_id: conversationId,
+        conversation_id: data?.typing_state_conversation_id,
         user_id: userId,
         is_typing: true,
         timestamp: new Date(),
       };
 
-      if (groupId) {
+      if (data?.typing_state_group_id) {
         await this.socketService.emitToGroupMembers(
-          groupId,
+          data?.typing_state_group_id,
           'user-typing',
           typingData,
           userId,
         );
-      } else if (receiverId) {
-        await this.socketService.emitToUser(receiverId, 'user-typing', typingData);
+      } else if (data?.typing_state_receiver_id) {
+        await this.socketService.emitToUser(data?.typing_state_receiver_id, 'user-typing', typingData);
       }
     } catch (error) {
       this.logger.error(
-        `Failed to start typing for user ${userId} in conversation ${conversationId}:`,
+        `Failed to start typing for user ${userId} in conversation ${data?.typing_state_conversation_id}:`,
         error,
       );
     }

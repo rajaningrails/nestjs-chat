@@ -19,7 +19,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
         migrations: [__dirname + '/migrations/*{.ts,.js}'],
 
         // synchronize: configService.get<boolean>('database.synchronize'),
-        synchronize: false,
+        synchronize: true,
         logging: configService.get<boolean>('database.logging'),
 
         charset: 'utf8mb4',

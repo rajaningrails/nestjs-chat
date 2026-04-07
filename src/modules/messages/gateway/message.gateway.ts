@@ -12,9 +12,7 @@ import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 import { SocketService } from 'src/common/services/socket/socket.service';
 import { PresenceService } from 'src/common/services/socket/presence.service';
-import { ConversationService } from 'src/modules/conversations/services/conversation.service';
 import { TypingService } from 'src/common/services/socket/typing.service';
-import { MessageService } from '../services/message.service';
 import { MessageDto } from '../dto/message.dto';
 import { User } from 'src/modules/users/entities/user.entity';
 import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
@@ -36,7 +34,7 @@ interface AuthenticatedSocket extends Socket {
 export class MessageGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
-  server: Server;
+  server!: Server;
 
   private readonly logger = new Logger(MessageGateway.name);
   private readonly heartbeatTimeouts = new Map<string, NodeJS.Timeout>();
@@ -45,8 +43,6 @@ export class MessageGateway
     private readonly socketService: SocketService,
     private readonly typingService: TypingService,
     private readonly presenceService: PresenceService,
-    private readonly conversationService: ConversationService,
-    private readonly messageService: MessageService,
   ) { }
 
   afterInit(server: Server) {
@@ -160,22 +156,22 @@ export class MessageGateway
       await this.typingService.startTyping(data, userId);
 
       const typingData = {
-        conversation_id: data.conversation_id,
+        conversation_id: data.typing_state_conversation_id,
         user_id: userId,
-        is_typing: data.is_typing,
+        is_typing: true,
         timestamp: new Date(),
       };
 
-      if (data.group_id) {
+      if (data.typing_state_group_id) {
         await this.socketService.emitToGroupMembers(
-          data.group_id,
+          data.typing_state_group_id,
           'typing',
           typingData,
           userId,
         );
-      } else if (data.receiver_id) {
+      } else if (data.typing_state_receiver_id) {
         await this.socketService.emitToUser(
-          data.receiver_id,
+          data.typing_state_receiver_id,
           'typing',
           typingData,
         );

@@ -26,7 +26,7 @@ export class TypingService implements OnApplicationBootstrap {
       await this.redisService.waitUntilReady();
 
       this.subscriber = this.redisService.getClient().duplicate();
-      await this.subscriber.connect(); // <-- add this line
+      await this.subscriber.connect(); 
 
       await this.subscriber.subscribe('__keyevent@0__:expired');
 
@@ -135,7 +135,8 @@ export class TypingService implements OnApplicationBootstrap {
           memberIds,
           'typing',
           typingData,
-          userId,
+          50,
+          userId
         );
       } else {
         await this.socketService.emitToUser(
@@ -191,7 +192,6 @@ export class TypingService implements OnApplicationBootstrap {
         );
       }
 
-      // Cleanup members key when explicitly stopped
       await this.redis.del(membersKey);
     } catch (error) {
       this.logger.error(`Failed to stop typing for user ${userId}:`, error);

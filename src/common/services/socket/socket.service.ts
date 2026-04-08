@@ -209,13 +209,15 @@ export class SocketService {
     event: string,
     data: any,
     batchSize: number = 50,
+    excludeUserId?: number,
   ): Promise<void> {
     try {
-      // Remove duplicates
       const uniqueUserIds = [...new Set(userIds)];
-
-      for (let i = 0; i < uniqueUserIds.length; i += batchSize) {
-        const batch = uniqueUserIds.slice(i, i + batchSize);
+      const filteredUserIds = uniqueUserIds.filter(
+        (userId) => userId !== excludeUserId,
+      )
+      for (let i = 0; i < filteredUserIds.length; i += batchSize) {
+        const batch = filteredUserIds.slice(i, i + batchSize);
         await Promise.all(
           batch.map((userId) => this.emitToUser(userId, event, data)),
         );

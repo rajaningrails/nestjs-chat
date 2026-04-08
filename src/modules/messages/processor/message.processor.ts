@@ -51,7 +51,7 @@ export class MessageProcessor
   private readonly LOCK_TTL = 30000;
   
   private flushInterval: NodeJS.Timeout | null = null;
-  private redis: Redis;
+  private redis!: Redis;
   private isShuttingDown = false;
 
   constructor(
@@ -78,7 +78,7 @@ export class MessageProcessor
           this.redis.scard(this.USER_SEEN_BUFFER_KEY),
           this.redis.hlen(this.CONVERSATION_UPDATE_BUFFER_KEY),
           this.redis.llen(this.GROUP_SEEN_BUFFER_KEY),
-          this.redis.hlen(this.UPDATE_USER_BUFFER_KEY)
+          this.redis.llen(this.UPDATE_USER_BUFFER_KEY)
         ]);
 
         const flushPromises: Promise<void>[] = [];

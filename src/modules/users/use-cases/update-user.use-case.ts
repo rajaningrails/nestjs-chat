@@ -2,10 +2,10 @@ import { Injectable, ConflictException, Inject } from '@nestjs/common';
 import { User } from '../entities/user.entity';
 import type { IUserRepository } from '../repositories/user.repository.interface';
 import { IUserRepositoryToken } from '../repositories/user.repository.interface';
-import { UpdateUserDto } from '../dto/update-user.dto';
 import { Queue } from 'bullmq';
 import { MessageProcessorConfig } from 'src/infrastructure/bullmq/size-queue.config';
 import { InjectQueue } from '@nestjs/bullmq';
+import { SyncUserDto } from '../dto/sync-user.dto';
 
 @Injectable()
 export class UpdateUserUseCase {
@@ -15,18 +15,22 @@ export class UpdateUserUseCase {
     @InjectQueue(MessageProcessorConfig.queue_name) private messageQueue: Queue,
   ) {}
 
-  async execute(request: UpdateUserDto): Promise<User | null> {
+  async execute(request: SyncUserDto): Promise<User | null> {
     const existingUser = await this.userRepository.findByUserId(
-      request.user_id!,
+      request.app_user_id!,
     );
     if (!existingUser) {
       throw new ConflictException('User does not exists');
     }
     await this.messageQueue.add(
-      'sync-user',
+      'user-sync',
       {
         ...existingUser,
-        ...request,
+        name: request.name,
+        image: request.image,
+        type: request.type,
+        school_id: request.app_id,
+        user_id: request.app_user_id,
       },
       {
         priority: 3,

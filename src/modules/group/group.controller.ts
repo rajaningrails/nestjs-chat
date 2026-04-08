@@ -46,9 +46,9 @@ export class GroupController {
     return this.groupRepository.getGroupNamesByUserId(query.group_id);
   }
 
-  @Get('getGroupDetailsByGroupId')
-  async findById(@Param('group_id') id: GetGroupDto['group_id']): Promise<ChatGroup | null> {
-    return this.groupRepository.findByIdWithGroupMembers(id);
+  @Post('getGroupDetailsByGroupId')
+  async findById(@Body() request: GetGroupDto): Promise<ChatGroup | null> {
+    return this.groupRepository.findByIdWithGroupMembers(request?.group_id);
   }
 
   // @Get('getGroupDetails')

@@ -1,35 +1,101 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { SocketService } from './socket.service';
 import { RedisService } from '../redis.service';
-import { Redis } from 'ioredis';
+import Redis from 'ioredis';
 
 @Injectable()
-export class TypingService {
+export class TypingService implements OnApplicationBootstrap {
   private readonly logger = new Logger(TypingService.name);
   private readonly TYPING_PREFIX = 'typing:';
-  private readonly TYPING_TIMEOUT_SECONDS = 10; // Redis TTL
+  private readonly TYPING_MEMBERS_PREFIX = 'conv:members:typing:';
+  private readonly TYPING_TIMEOUT_SECONDS = 10;
+  private subscriber!: Redis;
 
   constructor(
     private readonly redisService: RedisService,
     private readonly socketService: SocketService,
-  ) { }
+  ) {}
 
   private get redis(): Redis {
     return this.redisService.getClient();
   }
 
+  async onApplicationBootstrap() {
+    try {
+      this.logger.log('TypingService: waiting for Redis...');
+      await this.redisService.waitUntilReady();
+
+      this.subscriber = this.redisService.getClient().duplicate();
+      await this.subscriber.connect(); // <-- add this line
+
+      await this.subscriber.subscribe('__keyevent@0__:expired');
+
+      this.subscriber.on('message', async (channel, expiredKey) => {
+        if (!expiredKey.startsWith(this.TYPING_PREFIX)) return;
+        const conversationId = Number(
+          expiredKey.replace(this.TYPING_PREFIX, ''),
+        );
+        if (isNaN(conversationId)) return;
+        await this.handleTypingExpiry(conversationId);
+      });
+
+      this.logger.log('TypingService initialized successfully');
+    } catch (error) {
+      this.logger.error('Failed to initialize TypingService:', error);
+    }
+  }
+
+  async onModuleDestroy() {
+    await this.subscriber?.unsubscribe();
+    await this.subscriber?.quit();
+  }
+
+  private async handleTypingExpiry(conversationId: number): Promise<void> {
+    const typingData = {
+      typing_state_conversation_id: conversationId,
+      is_typing: false,
+      expired: true,
+      timestamp: new Date(),
+    };
+
+    try {
+      const membersKey = `${this.TYPING_MEMBERS_PREFIX}${conversationId}`;
+      const memberStrings = await this.redis.smembers(membersKey);
+      const memberIds = memberStrings
+        .map((id) => parseInt(id, 10))
+        .filter((id) => !isNaN(id));
+
+      if (memberIds.length === 0) {
+        this.logger.debug(
+          `No members found for expired typing conversation ${conversationId}`,
+        );
+        return;
+      }
+
+      await this.socketService.emitToUsers(memberIds, 'hideTyping', typingData);
+
+      await this.redis.del(membersKey);
+    } catch (error) {
+      this.logger.error(
+        `Failed to emit hideTyping on expiry for conversation ${conversationId}:`,
+        error,
+      );
+    }
+  }
 
   async startTyping(
     data: {
-      typing_state_conversation_id: number,
-      typing_state_sender_id: number,
-      typing_state_receiver_id: number,
-      typing_state_group_id: number,
+      typing_state_conversation_id: number;
+      typing_state_sender_id: number;
+      typing_state_receiver_id: number;
+      group_id?: number;
     },
-    userId
+    userId: number,
   ): Promise<void> {
     try {
-      const key = `${this.TYPING_PREFIX}${data?.typing_state_conversation_id}`;
+      const key = `${this.TYPING_PREFIX}${data.typing_state_conversation_id}`;
+      const membersKey = `${this.TYPING_MEMBERS_PREFIX}${data.typing_state_conversation_id}`;
+      const isGroupChat = !Number(data.typing_state_receiver_id);
 
       await this.redis
         .multi()
@@ -37,71 +103,98 @@ export class TypingService {
         .expire(key, this.TYPING_TIMEOUT_SECONDS)
         .exec();
 
+      let memberIds: number[] = [];
+
+      if (isGroupChat && data.group_id) {
+        memberIds = await this.socketService.getGroupMemberIds(data.group_id);
+      } else {
+        memberIds = [
+          data.typing_state_sender_id,
+          data.typing_state_receiver_id,
+        ].filter((id): id is number => !!id);
+      }
+
+      if (memberIds.length > 0) {
+        await this.redis
+          .multi()
+          .sadd(membersKey, ...memberIds.map(String))
+          .expire(membersKey, this.TYPING_TIMEOUT_SECONDS + 5)
+          .exec();
+      }
+
       const typingData = {
-        conversation_id: data?.typing_state_conversation_id,
+        typing_state_conversation_id: data.typing_state_conversation_id,
+        typing_state_receiver_id: data.typing_state_receiver_id,
         user_id: userId,
         is_typing: true,
         timestamp: new Date(),
       };
 
-      if (data?.typing_state_group_id) {
-        await this.socketService.emitToGroupMembers(
-          data?.typing_state_group_id,
-          'user-typing',
+      if (isGroupChat) {
+        await this.socketService.emitToUsers(
+          memberIds,
+          'typing',
           typingData,
           userId,
         );
-      } else if (data?.typing_state_receiver_id) {
-        await this.socketService.emitToUser(data?.typing_state_receiver_id, 'user-typing', typingData);
+      } else {
+        await this.socketService.emitToUser(
+          data.typing_state_receiver_id,
+          'typing',
+          typingData,
+        );
       }
     } catch (error) {
-      this.logger.error(
-        `Failed to start typing for user ${userId} in conversation ${data?.typing_state_conversation_id}:`,
-        error,
-      );
+      this.logger.error(`Failed to start typing for user ${userId}:`, error);
     }
   }
 
-  /**
-   * Stop typing in a conversation
-   * For one-to-one: pass receiverId
-   * For group: pass groupId
-   */
   async stopTyping(
-    conversationId: number,
+    data: {
+      typing_state_conversation_id: number;
+      typing_state_sender_id: number;
+      typing_state_receiver_id: number;
+      group_id?: number;
+    },
     userId: number,
-    receiverId?: number,
-    groupId?: number,
   ): Promise<void> {
     try {
-      const key = `${this.TYPING_PREFIX}${conversationId}`;
+      const key = `${this.TYPING_PREFIX}${data.typing_state_conversation_id}`;
+      const membersKey = `${this.TYPING_MEMBERS_PREFIX}${data.typing_state_conversation_id}`;
+      const isGroupChat = !Number(data.typing_state_receiver_id);
 
       await this.redis.srem(key, userId.toString());
 
       const typingData = {
-        conversation_id: conversationId,
+        typing_state_conversation_id: data.typing_state_conversation_id,
+        typing_state_receiver_id: data.typing_state_receiver_id,
         user_id: userId,
         is_typing: false,
         timestamp: new Date(),
       };
 
-      if (groupId) {
-        // Group chat - emit to all members except the typer
-        await this.socketService.emitToGroupMembers(
-          groupId,
-          'user-typing',
-          typingData,
-          userId, // exclude the user who stopped typing
+      if (isGroupChat && data.group_id) {
+        const memberIds = await this.socketService.getGroupMemberIds(
+          data.group_id,
         );
-      } else if (receiverId) {
-        // One-to-one chat - emit only to the receiver
-        await this.socketService.emitToUser(receiverId, 'user-typing', typingData);
+        await this.socketService.emitToUsers(
+          memberIds,
+          'hideTyping',
+          typingData,
+          userId,
+        );
+      } else {
+        await this.socketService.emitToUser(
+          data.typing_state_receiver_id,
+          'hideTyping',
+          typingData,
+        );
       }
+
+      // Cleanup members key when explicitly stopped
+      await this.redis.del(membersKey);
     } catch (error) {
-      this.logger.error(
-        `Failed to stop typing for user ${userId} in conversation ${conversationId}:`,
-        error,
-      );
+      this.logger.error(`Failed to stop typing for user ${userId}:`, error);
     }
   }
 

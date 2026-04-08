@@ -7,12 +7,14 @@ import { Conversation } from './entities/conversation.entity';
 import { ConversationService } from './services/conversation.service';
 import { MessageModule } from '../messages/message.module';
 import { UsersModule } from '../users/users.module';
+import { GroupModule } from '../group/group.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Conversation]),
     forwardRef(() => MessageModule),
-    UsersModule
+    UsersModule,
+    GroupModule
   ],
   controllers: [ConversationController],
   providers: [
@@ -23,6 +25,10 @@ import { UsersModule } from '../users/users.module';
     ConversationService,
     ConversationRepository,
   ],
-  exports: [IConversationRepositoryToken, ConversationRepository, ConversationService],
+  exports: [
+    IConversationRepositoryToken,
+    ConversationRepository,
+    ConversationService,
+  ],
 })
 export class ConversationsModule {}

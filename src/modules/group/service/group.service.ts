@@ -14,6 +14,7 @@ import {
 import { MessageRepository } from 'src/modules/messages/repositories/message.repository';
 import { generateSafeNumericId } from 'src/utils/helpers';
 import { UserRepository } from 'src/modules/users/repositories/user.repository';
+import { SocketService } from 'src/common/services/socket/socket.service';
 @Injectable()
 export class GroupService {
   constructor(
@@ -21,6 +22,7 @@ export class GroupService {
     private readonly conversationRepository: ConversationRepository,
     private readonly messageRepository: MessageRepository,
     private readonly userRepository: UserRepository,
+    private readonly socketService: SocketService,
   ) {}
 
   async createGroup(payload: {
@@ -41,7 +43,7 @@ export class GroupService {
     await this.messageRepository.save({
       message: 'New group has been created',
       conversation_id,
-      sender_id: payload?.group?.created_by,
+      message_sender_id: payload?.group?.created_by,
       group_id: groupResponse?.id,
       school_id: payload?.group?.school_id,
       id: message_id,
@@ -56,6 +58,20 @@ export class GroupService {
         group_id: groupResponse?.id,
         user_id: m.user_id,
       })),
+    );
+    await this.socketService.emitToGroupMembers(
+      groupResponse?.id,
+      'group-created',
+      {
+        group_id: groupResponse?.id,
+        group_name: groupResponse?.group_name,
+        group_image: groupResponse?.group_image,
+        last_message: 'New group has been created',
+        conversation_id: conversation_id,
+        last_message_id: message_id,
+        created_at: new Date(),
+        sender_id: payload?.group?.created_by,
+      },
     );
     return {
       ...groupResponse,

@@ -14,6 +14,7 @@ import { ChatGroupMember } from './chat-group-member.entity';
 import { GroupMessageSeen } from './chat-group-message-seen.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
+import { Message } from 'src/modules/messages/entities/message.entity';
 
 @Entity('chat_groups')
 @Index(['group_name'], { unique: true })
@@ -56,4 +57,7 @@ export class ChatGroup {
 
   @OneToMany(() => Conversation, (conversation) => conversation.group)
   conversations: Conversation[];
+
+  @OneToMany(() => Message, (message) => message.group)
+  messages: Message[];
 }

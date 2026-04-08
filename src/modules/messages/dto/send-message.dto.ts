@@ -21,7 +21,7 @@ export class SendMessageDto {
 
   @IsNumberString()
   @IsNotEmpty()
-  sender_id: number;
+  message_sender_id: number;
 
   @IsNumberString()
   @IsNotEmpty()
@@ -29,7 +29,7 @@ export class SendMessageDto {
 
   @IsOptional()
   @IsNumberString()
-  receiver_id?: number;
+  message_receiver_id?: number;
 
   @IsOptional()
   @IsNumberString()

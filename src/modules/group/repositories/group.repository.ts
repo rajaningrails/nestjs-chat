@@ -103,14 +103,14 @@ export class GroupRepository implements IGroupRepository {
     }[],
   ) {
     if (!payload.length) return;
-  
-    const values = payload.map(p => ({
+
+    const values = payload.map((p) => ({
       message_id: p.messageId,
       conversation_id: p.conversationID,
       user_id: p.senderID,
       group_id: p.groupID,
     }));
-  
+
     await this.groupMessageSeenRepo
       .createQueryBuilder()
       .insert()
@@ -121,7 +121,7 @@ export class GroupRepository implements IGroupRepository {
         ['group_id', 'user_id', 'message_id'],
       )
       .execute();
-  }  
+  }
 
   async update(data: UpdateGroupDto): Promise<IRepositoryGroupResponse> {
     const {
@@ -200,16 +200,17 @@ export class GroupRepository implements IGroupRepository {
     return group;
   }
 
-  async getGroupMembers(groupId:number): Promise<ChatGroupMember[]> {
-    return this.groupMemberRepo.find({ where: { group_id: groupId }, select:['user_id']});
+  async getGroupMembers(groupId: number): Promise<ChatGroupMember[]> {
+    return this.groupMemberRepo.find({
+      where: { group_id: groupId },
+      select: ['user_id'],
+    });
   }
 
-  async getGroupNamesByUserId(
-    group_id: number,
-  ): Promise<ChatGroup[] | null> {
-    console.log({group_id})
+  async getGroupNamesByUserId(group_id: number): Promise<ChatGroup[] | null> {
+    console.log({ group_id });
     if (!group_id || Number(group_id)) {
-      throw new NotFoundException("Group not found");
+      throw new NotFoundException('Group not found');
     }
     const groups = await this.groupRepo.find({
       where: {
@@ -219,6 +220,17 @@ export class GroupRepository implements IGroupRepository {
       relations: ['members', 'members.user'],
     });
     return groups;
+  }
+
+  async softDelete(conversationId: number): Promise<boolean> {
+    try {
+      await this.groupRepo.update(conversationId, {
+        deleted_at: new Date(),
+      });
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 
   async getGroupList(

@@ -32,7 +32,8 @@ interface AuthenticatedSocket extends Socket {
   pingTimeout: 60000,
 })
 export class MessageGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server!: Server;
 
@@ -43,7 +44,7 @@ export class MessageGateway
     private readonly socketService: SocketService,
     private readonly typingService: TypingService,
     private readonly presenceService: PresenceService,
-  ) { }
+  ) {}
 
   afterInit(server: Server) {
     this.socketService.setServer(server);
@@ -78,9 +79,8 @@ export class MessageGateway
       });
 
       this.socketService.broadcast('userOnline', {
-        senderId: userId
-      })
-
+        senderId: userId,
+      });
     } catch (error) {
       this.logger.error('Connection handling error:', error);
       client.disconnect();
@@ -102,10 +102,10 @@ export class MessageGateway
       if (!isStillOnline) {
         await this.presenceService.setOffline(userId);
       }
-        
+
       this.socketService.broadcast('userOffline', {
-        senderId: userId
-      })
+        senderId: userId,
+      });
 
       this.logger.log(`👋 User ${userId} disconnected (socket: ${client.id})`);
     } catch (error) {
@@ -141,11 +141,31 @@ export class MessageGateway
   @SubscribeMessage('typing')
   async handleTyping(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: {
-      typing_state_conversation_id: number,
-      typing_state_sender_id: number,
-      typing_state_receiver_id: number,
-      typing_state_group_id: number,
+    @MessageBody()
+    data: {
+      typing_state_conversation_id: number;
+      typing_state_sender_id: number;
+      typing_state_receiver_id: number;
+    },
+  ) {
+    const userId = client.userId;
+
+    if (!userId) return;
+    try {
+      await this.typingService.startTyping(data, userId);
+    } catch (error) {
+      this.logger.error('Failed to handle typing indicator:', error);
+    }
+  }
+
+  @SubscribeMessage('stopTyping')
+  async handleStopTyping(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody()
+    data: {
+      typing_state_conversation_id: number;
+      typing_state_sender_id: number;
+      typing_state_receiver_id: number;
     },
   ) {
     const userId = client.userId;
@@ -153,29 +173,7 @@ export class MessageGateway
     if (!userId) return;
 
     try {
-      await this.typingService.startTyping(data, userId);
-
-      const typingData = {
-        conversation_id: data.typing_state_conversation_id,
-        user_id: userId,
-        is_typing: true,
-        timestamp: new Date(),
-      };
-
-      if (data.typing_state_group_id) {
-        await this.socketService.emitToGroupMembers(
-          data.typing_state_group_id,
-          'typing',
-          typingData,
-          userId,
-        );
-      } else if (data.typing_state_receiver_id) {
-        await this.socketService.emitToUser(
-          data.typing_state_receiver_id,
-          'typing',
-          typingData,
-        );
-      }
+      await this.typingService.stopTyping(data, userId);
     } catch (error) {
       this.logger.error('Failed to handle typing indicator:', error);
     }
@@ -187,15 +185,11 @@ export class MessageGateway
     groupData: any,
   ) {
     try {
-      await this.socketService.emitToUsers(
-        memberIds,
-        'group-created',
-        {
-          conversation_id: conversationId,
-          conversation: groupData,
-          timestamp: new Date(),
-        },
-      );
+      await this.socketService.emitToUsers(memberIds, 'group-created', {
+        conversation_id: conversationId,
+        conversation: groupData,
+        timestamp: new Date(),
+      });
     } catch (error) {
       this.logger.error('Failed to emit group created event:', error);
     }
@@ -209,16 +203,12 @@ export class MessageGateway
   ) {
     try {
       // Emit to all group members including the updater
-      await this.socketService.emitToGroupMembers(
-        groupId,
-        'group-updated',
-        {
-          conversation_id: conversationId,
-          updates,
-          updated_by: updatedBy,
-          timestamp: new Date(),
-        },
-      );
+      await this.socketService.emitToGroupMembers(groupId, 'group-updated', {
+        conversation_id: conversationId,
+        updates,
+        updated_by: updatedBy,
+        timestamp: new Date(),
+      });
     } catch (error) {
       this.logger.error('Failed to emit group updated event:', error);
     }
@@ -242,7 +232,7 @@ export class MessageGateway
           timestamp: new Date(),
         },
         undefined,
-        newMemberIds, 
+        newMemberIds,
       );
 
       for (const memberId of newMemberIds) {
@@ -265,16 +255,12 @@ export class MessageGateway
     removedBy: number,
   ) {
     try {
-      await this.socketService.emitToGroupMembers(
-        groupId,
-        'member-removed',
-        {
-          conversation_id: conversationId,
-          removed_member: removedMemberId,
-          removed_by: removedBy,
-          timestamp: new Date(),
-        },
-      );
+      await this.socketService.emitToGroupMembers(groupId, 'member-removed', {
+        conversation_id: conversationId,
+        removed_member: removedMemberId,
+        removed_by: removedBy,
+        timestamp: new Date(),
+      });
 
       // Notify the removed member
       await this.socketService.emitToUser(
@@ -297,15 +283,11 @@ export class MessageGateway
     deletedBy: number,
   ) {
     try {
-      await this.socketService.emitToGroupMembers(
-        groupId,
-        'group-deleted',
-        {
-          conversation_id: conversationId,
-          deleted_by: deletedBy,
-          timestamp: new Date(),
-        },
-      );
+      await this.socketService.emitToGroupMembers(groupId, 'group-deleted', {
+        conversation_id: conversationId,
+        deleted_by: deletedBy,
+        timestamp: new Date(),
+      });
     } catch (error) {
       this.logger.error('Failed to emit group deleted event:', error);
     }
@@ -315,7 +297,7 @@ export class MessageGateway
     message: MessageDto,
     sender_user_details: User,
     receiver_user_details: User | null,
-    conversation: Conversation
+    conversation: Conversation,
   ) {
     try {
       const messageData = {
@@ -337,14 +319,17 @@ export class MessageGateway
           created_at: new Date(),
           updated_at: new Date(),
           receiver_image: receiver_user_details?.image,
-          isOnline: message?.receiver_id ? this.socketService.isUserOnline(message.receiver_id!) : false,
+          isOnline: message?.receiver_id
+            ? this.socketService.isUserOnline(message.receiver_id!)
+            : false,
+          isGroupMessage: message?.group_id ? true : false,
           user_details: {
             id: sender_user_details?.user_id?.toString(),
             name: sender_user_details?.name,
             image: sender_user_details?.image,
             level: sender_user_details?.type,
           },
-        }
+        },
       };
 
       const latestMessagePayload = {
@@ -365,9 +350,14 @@ export class MessageGateway
         is_only_teachers_group: conversation.group_type,
         last_message_receiver_type: receiver_user_details?.type,
         attachments: message.attachments,
-        isOnline: message?.receiver_id ? this.socketService.isUserOnline(message.receiver_id!) : false,
-        is_online: message?.receiver_id ? this.socketService.isUserOnline(message.receiver_id!) : false,
+        isOnline: message?.receiver_id
+          ? this.socketService.isUserOnline(message.receiver_id!)
+          : false,
+        is_online: message?.receiver_id
+          ? this.socketService.isUserOnline(message.receiver_id!)
+          : false,
         group_name: '',
+        isGroupMessage: message?.group_id ? true : false,
         group_image: '',
         user_details: {
           id: sender_user_details?.user_id?.toString(),
@@ -375,7 +365,7 @@ export class MessageGateway
           image: sender_user_details?.image,
           level: sender_user_details?.type,
         },
-      }
+      };
 
       if (message?.group_id) {
         await this.socketService.emitToGroupMembers(
@@ -405,16 +395,14 @@ export class MessageGateway
     }
   }
 
-  async emitMessageDeleted(
-    request: {
-      messageId: number,
-      receiverID: number,
-      senderID: number,
-      conversationID: number,
-      message_remover_name: string,
-      groupID: number
-    }
-  ) {
+  async emitMessageDeleted(request: {
+    messageId: number;
+    receiverID: number;
+    senderID: number;
+    conversationID: number;
+    message_remover_name: string;
+    groupID: number;
+  }) {
     try {
       if (request?.groupID) {
         await this.socketService.emitToGroupMembers(

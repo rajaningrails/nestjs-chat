@@ -459,7 +459,6 @@ export class ConversationRepository implements IConversationRepository {
         }
         return message;
       });
-
       return {
         message: 'Messages retrieved successfully',
         data: formattedMessages,
@@ -468,6 +467,8 @@ export class ConversationRepository implements IConversationRepository {
         totalPages,
         totalItems: messages.length,
         totalRecords,
+        status: true,
+        success: true
       };
     } catch (error) {
       return {

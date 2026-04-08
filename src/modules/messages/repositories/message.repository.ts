@@ -44,7 +44,10 @@ export class MessageRepository implements IMessageRepository {
   }
 
   async save(messageData: Partial<SendMessageDto>): Promise<Message> {
-    const message = this.messageRepository.create(messageData);
+    const message = this.messageRepository.create({
+      ...messageData,
+      sender_id: messageData?.message_sender_id
+    });
     return this.messageRepository.save(message);
   }
 

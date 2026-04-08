@@ -1,18 +1,20 @@
-import {
-    IsNumberString,
-} from 'class-validator';
+import { IsNumberString, ValidateIf, IsOptional } from 'class-validator';
 
 export class DeleteConversationDto {
-    @IsNumberString()
-    receiverID: number;
+  
+  @ValidateIf((o) => !o.groupID)
+  @IsNumberString()
+  receiverID?: number;
 
-    @IsNumberString()
-    senderID?: number;
+  @IsOptional()
+  @IsNumberString()
+  senderID?: number;
 
-    @IsNumberString()
-    conversationID?: number;
+  @IsOptional()
+  @IsNumberString()
+  conversationID?: number;
 
-    @IsNumberString()
-    groupID?: number;
-
+  @IsOptional()
+  @IsNumberString()
+  groupID?: number;
 }

@@ -37,28 +37,28 @@ export class SendMessageUseCase {
     const messageData: MessageDto = {
       id: generateSafeNumericId(),
       conversation_id: request.conversation_id!,
-      sender_id: request.sender_id!,
-      receiver_id: !existingConversation.group_id ? request.receiver_id : undefined,
+      sender_id: request.message_sender_id!,
+      receiver_id: !existingConversation.group_id ? request.message_receiver_id : undefined,
       message: request.message,
       school_id: request.school_id!,
       attachments: request.attachments,
       group_id: existingConversation.group_id,
     };
 
-    if (existingConversation.group_id || !request.receiver_id) {
+    if (existingConversation.group_id || !request.message_receiver_id) {
       delete messageData.receiver_id
     }
 
     await this.messagesService.createMessage(messageData);
 
     const sender_user_details = await this.userService.findUserById(
-      request.sender_id!,
+      request.message_sender_id!,
     );
 
     let receiver_user_details: User | null = null;
-    if (request.receiver_id) {
+    if (request.message_receiver_id) {
       receiver_user_details = await this.userService.findUserById(
-        request.sender_id!,
+        request.message_receiver_id!,
       );
     }
     await this.messageGateway.emitNewMessage(messageData, sender_user_details!, receiver_user_details, existingConversation)
@@ -69,9 +69,9 @@ export class SendMessageUseCase {
       conversation_id: messageData.conversation_id,
       seen_at: null,
       messageTime: new Date(),
-      message_sender_id: request.sender_id,
+      message_sender_id: request.message_sender_id,
       school_id: request.school_id,
-      message_receiver_id: request.receiver_id,
+      message_receiver_id: request.message_receiver_id,
       group_id: request.group_id,
       is_group: !!request.group_id,
       user_details: {

@@ -1,4 +1,9 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis, { Redis as RedisClient } from 'ioredis';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -6,27 +11,21 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
-  private client: RedisClient;
-  private isConnected = false;
+  private client!: RedisClient;
+  private isConnected: boolean = false;
 
-  constructor(private configService: ConfigService) {}
-
-  async onModuleInit() {
-    await this.connect();
-  }
-
-  private async connect() {
-    if (this.isConnected) return;
-
+  constructor(private configService: ConfigService) {
     this.client = new Redis({
       host: this.configService.get<string>('redis.host', 'localhost'),
       port: this.configService.get<number>('redis.port', 6379),
       password: this.configService.get<string>('redis.password') || undefined,
       db: this.configService.get<number>('redis.db', 0),
-      lazyConnect: false,
+      lazyConnect: true,
       retryStrategy: (times) => {
         const delay = Math.min(times * 50, 2000);
-        this.logger.warn(`Redis reconnection attempt #${times}, retrying in ${delay}ms`);
+        this.logger.warn(
+          `Redis reconnection attempt #${times}, retrying in ${delay}ms`,
+        );
         return delay;
       },
       maxRetriesPerRequest: 3,
@@ -40,24 +39,31 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       this.logger.log('Redis Client Connected');
       this.isConnected = true;
     });
-
-    this.client.on('ready', () => {
-      this.logger.log('Redis Client Ready');
-    });
-
+    this.client.on('ready', () => this.logger.log('Redis Client Ready'));
     this.client.on('error', (err) => {
       this.logger.error('Redis Client Error', err);
       this.isConnected = false;
     });
-
     this.client.on('close', () => {
       this.logger.warn('Redis Connection Closed');
       this.isConnected = false;
     });
+    this.client.on('reconnecting', () =>
+      this.logger.warn('Redis Client Reconnecting...'),
+    );
+  }
 
-    this.client.on('reconnecting', () => {
-      this.logger.warn('Redis Client Reconnecting...');
-    });
+  async onModuleInit() {
+    await this.client.connect();
+    await this.enableKeyspaceNotifications();
+  }
+
+  private async enableKeyspaceNotifications(): Promise<void> {
+    try {
+      await this.client.config('SET', 'notify-keyspace-events', 'Ex');
+    } catch (error) {
+      this.logger.error('Failed to enable keyspace notifications', error);
+    }
   }
 
   async onModuleDestroy() {
@@ -69,7 +75,22 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async waitUntilReady(): Promise<void> {
     if (this.client.status === 'ready') return;
-    await this.client.ping();
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Redis connection timed out after 10s'));
+      }, 10000);
+
+      this.client.once('ready', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+
+      this.client.once('error', (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
+    });
   }
 
   async get<T = string>(key: string): Promise<T | null> {
@@ -84,7 +105,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async set(key: string, value: any, ttlSeconds?: number): Promise<void> {
-    const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
+    const stringValue =
+      typeof value === 'string' ? value : JSON.stringify(value);
 
     if (ttlSeconds !== undefined) {
       await this.client.setex(key, ttlSeconds, stringValue);

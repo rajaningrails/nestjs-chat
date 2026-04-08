@@ -4,7 +4,6 @@ import {
   Body,
   Inject,
 } from '@nestjs/common';
-import { IMessageRepositoryToken } from './repositories/message.repository.interface';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { SendMessageUseCase } from './use-cases/send-message.use-case';
@@ -18,7 +17,6 @@ import { SendMessageDto } from './dto/send-message.dto';
 @Controller()
 export class MessageController {
   constructor(
-    @Inject(IMessageRepositoryToken)
     private readonly sendMessageUseCase: SendMessageUseCase,
     private readonly createMessageUseCase: CreateMessageUseCase,
     private readonly deleteMessageUseCase: DeleteMessageUseCase,
@@ -36,7 +34,7 @@ export class MessageController {
     return this.createMessageUseCase.execute(dto);
   }
 
-  @Post('update-seen-at')
+  @Post('update-seen-at/conversation')
   async markAsSeen(@Body() dto: SeenMessageDto) {
     return this.seenMessageUseCase.execute(dto);
   }

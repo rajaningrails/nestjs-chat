@@ -174,7 +174,6 @@ export class ConversationRepository implements IConversationRepository {
         .leftJoinAndSelect('c.lastMessage', 'lastMessage')
         .leftJoin('group.members', 'gm')
         .where('c.school_id = :school_id', { school_id })
-        .andWhere('c.type = :type', { type })
         .andWhere('c.deleted_at IS NULL');
 
       queryBuilder.andWhere(
@@ -182,7 +181,7 @@ export class ConversationRepository implements IConversationRepository {
         { sender_id },
       );
 
-      if (receiver_id !== null) {
+      if (receiver_id) {
         queryBuilder.andWhere(
           '(c.last_message_sender_id = :receiver_id OR c.last_message_receiver_id = :receiver_id)',
           { receiver_id },
@@ -212,7 +211,8 @@ export class ConversationRepository implements IConversationRepository {
         group_image: conversations.group?.group_image,
         created_at: conversations.created_at,
         updated_at: conversations.updated_at,
-        last_message: conversations.lastMessage,
+        last_message: conversations.lastMessage?.message,
+        last_message_sender_id: conversations.last_message_sender_id,
       };
 
       return {

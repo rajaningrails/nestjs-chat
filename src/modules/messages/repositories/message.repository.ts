@@ -38,7 +38,7 @@ export class MessageRepository implements IMessageRepository {
 
   async findById(id: number): Promise<Message | null> {
     return this.messageRepository.findOne({
-      where: { id },
+      where: { id: String(id) as any },
       withDeleted: false,
     });
   }
@@ -46,7 +46,7 @@ export class MessageRepository implements IMessageRepository {
   async save(messageData: Partial<SendMessageDto>): Promise<Message> {
     const message = this.messageRepository.create({
       ...messageData,
-      sender_id: messageData?.message_sender_id
+      sender_id: messageData?.message_sender_id,
     });
     return this.messageRepository.save(message);
   }
@@ -58,21 +58,21 @@ export class MessageRepository implements IMessageRepository {
   }
 
   async getConversationMessages(
-      conversation_id: number,
-      limit = 25,
-      offset = 0,
-    ): Promise<Message[]> {
-      return this.messageRepository.find({
-        where: { 
-          conversation_id: Number(conversation_id) 
-        },
-        relations: ['sender', 'receiver', 'group'],
-        take: limit,
-        skip: offset,
-        order: { created_at: 'DESC' },
-        withDeleted: true
-      });
-    }
+    conversation_id: number,
+    limit = 25,
+    offset = 0,
+  ): Promise<Message[]> {
+    return this.messageRepository.find({
+      where: {
+        conversation_id: Number(conversation_id),
+      },
+      relations: ['sender', 'receiver', 'group'],
+      take: limit,
+      skip: offset,
+      order: { created_at: 'DESC' },
+      withDeleted: true,
+    });
+  }
 
   async upsertBatch(messages: Message[]): Promise<void> {
     if (!messages.length) return;

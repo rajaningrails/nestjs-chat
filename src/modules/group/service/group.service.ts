@@ -97,12 +97,14 @@ export class GroupService {
 
   async groupMessageSeenBatch(
     payload: {
-      messageId: number;
-      conversationID: number;
-      senderID: number;
-      groupID: number;
+      id: number;
+      conversation_id: number;
+      seen_update_sender_id: number;
+      seen_update_receiver_id?: number;
+      group_id: number;
     }[],
   ) {
+    console.log('started-group-message-seen',payload);
     return await this.groupRepository.groupMessageSeenBatch(payload);
   }
 }

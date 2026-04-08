@@ -102,31 +102,26 @@ export class MessageService {
       throw new Error('Message ID is required for seen status');
     }
 
-    await this.messageQueue.add(
-      'one-to-one-seen',
-      request,
-      {
-        jobId: `one-to-one-message-seen-${request?.id}`,
-        priority: 3,
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 1000,
-        },
+    await this.messageQueue.add('one-to-one-seen', request, {
+      jobId: `one-to-one-message-seen-${request?.id}`,
+      priority: 3,
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 1000,
       },
-    );
+    });
   }
 
-  async groupChatMessageSeen(request: SeenMessageDto) {
+  async groupChatMessageSeen(request) {
     if (!request.id) {
       throw new Error('Message ID is required for group seen status');
     }
-
     await this.messageQueue.add(
       'group-message-seen',
       { ...request },
       {
-        jobId: `group-message-seen-${request.id}`,
+        jobId: `group-message-seen-${request.id}-${request.seen_update_sender_id}-${Date.now()}`,
         priority: 3,
         attempts: 3,
         backoff: {

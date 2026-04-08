@@ -22,7 +22,6 @@ export class UserController {
 
   @Post('sync-user')
   async syncUser(@Body() updateUserDto: SyncUserDto): Promise<User> {
-    console.log(updateUserDto,'test');
     const user = await this.updateUserUseCase.execute(updateUserDto);
     return user!;
   }

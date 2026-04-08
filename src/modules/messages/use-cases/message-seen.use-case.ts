@@ -9,7 +9,6 @@ export class MessageSeenUseCase {
   constructor(
     private readonly messageService: MessageService,
     private readonly socketService: SocketService,
-    private readonly messageRepository: MessageRepository
   ) { }
 
   async execute(request: SeenMessageDto) {
@@ -27,13 +26,12 @@ export class MessageSeenUseCase {
       message_seen_update_receiver_id: request.seen_update_receiver_id,
       conversation_id: request.conversation_id
     }
-    if (!request.seen_update_receiver_id) {
+    if (Number(request.group_id)) {
       await this.messageService.groupChatMessageSeen(request);
-      const messageDetail = await this.messageRepository.findById(request.id);
-      this.socketService.emitToGroupMembers(messageDetail?.group_id!, 'message-seen', response)
+      await this.socketService.emitToGroupMembers(request?.group_id!, 'message-seen', response)
     } else {
       await this.messageService.oneToOneChatMessageSeen(request);
-      this.socketService.emitToUser(request.seen_update_receiver_id, 'message-seen', response)
+      await this.socketService.emitToUser(Number(request.seen_update_receiver_id)!, 'message-seen', response)
     }
     return response
   }

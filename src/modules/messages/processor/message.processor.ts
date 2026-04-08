@@ -22,6 +22,10 @@ import { UpdateUserDto } from 'src/modules/users/dto/update-user.dto';
     max: MessageProcessorConfig.max_no_of_job_per_second,
     duration: 1000,
   },
+  defaultJobOptions: {
+    removeOnComplete: true,
+    removeOnFail: false,
+  },
 })
 @Injectable()
 export class MessageProcessor
@@ -328,6 +332,7 @@ export class MessageProcessor
       }
 
       const batch = rawData.map((item) => JSON.parse(item));
+      console.log(batch,'flush')
       try {
         await this.groupService.groupMessageSeenBatch(batch);
       } catch (error) {

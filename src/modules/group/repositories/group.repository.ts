@@ -96,21 +96,22 @@ export class GroupRepository implements IGroupRepository {
 
   async groupMessageSeenBatch(
     payload: {
-      messageId: number;
-      conversationID: number;
-      senderID: number;
-      groupID: number;
+      id: number;
+      conversation_id: number;
+      seen_update_sender_id: number;
+      seen_update_receiver_id?: number;
+      group_id: number;
     }[],
   ) {
     if (!payload.length) return;
 
     const values = payload.map((p) => ({
-      message_id: p.messageId,
-      conversation_id: p.conversationID,
-      user_id: p.senderID,
-      group_id: p.groupID,
+      message_id: p.id,
+      conversation_id: p.conversation_id,
+      user_id: p.seen_update_sender_id,
+      group_id: p.group_id,
     }));
-
+    console.log('executed')
     await this.groupMessageSeenRepo
       .createQueryBuilder()
       .insert()

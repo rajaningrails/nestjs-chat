@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, EntityManager, IsNull, Repository } from 'typeorm';
 import { IConversationRepository } from './conversation.repository.interface';
@@ -9,6 +9,10 @@ import { UpdateConversationDto } from '../dto/update-conversation.dto';
 import { ConversationType } from '../dto/conversations.enum';
 import { MessageRepository } from 'src/modules/messages/repositories/message.repository';
 import { SocketService } from 'src/common/services/socket/socket.service';
+import { RedisService } from 'src/common/services/redis.service';
+import { DeleteConversationDto } from '../dto/conversation-delete.dto';
+import { GroupRepository } from 'src/modules/group/repositories/group.repository';
+import { UsersService } from 'src/modules/users/services/users.service';
 
 @Injectable()
 export class ConversationRepository implements IConversationRepository {
@@ -16,8 +20,15 @@ export class ConversationRepository implements IConversationRepository {
     @InjectRepository(Conversation)
     private readonly conversationRepository: Repository<Conversation>,
     private readonly messageRepository: MessageRepository,
-    private readonly socketService: SocketService
+    private readonly socketService: SocketService,
+    private readonly redisService: RedisService,
+    private readonly groupRepository: GroupRepository,
+    private readonly userService: UsersService,
   ) {}
+
+  private get redis() {
+    return this.redisService.getClient();
+  }
 
   async findAll(limit = 20, offset = 0): Promise<Conversation[]> {
     return this.conversationRepository.find({
@@ -41,7 +52,7 @@ export class ConversationRepository implements IConversationRepository {
           'last_message_id',
           'last_message_sender_id',
           'last_message_receiver_id',
-          'updated_at'
+          'updated_at',
         ],
         ['id'],
       )
@@ -295,13 +306,13 @@ export class ConversationRepository implements IConversationRepository {
       `;
 
       const params: any[] = [
-        user_id,                  
-        ConversationType.GROUP,   
-        ConversationType.GROUP,   
-        ConversationType.USER,    
+        user_id,
+        ConversationType.GROUP,
+        ConversationType.GROUP,
+        ConversationType.USER,
         user_id,
         user_id,
-        user_id,                  
+        user_id,
         school_id,
         user_id,
         user_id,
@@ -320,11 +331,11 @@ export class ConversationRepository implements IConversationRepository {
           ConversationType.USER,
           `%${search}%`,
           ConversationType.GROUP,
-          `%${search}%`
+          `%${search}%`,
         );
       }
 
-    const countQuery = `
+      const countQuery = `
       SELECT COUNT(DISTINCT subquery.id) as total
       FROM (${baseQuery}) as subquery
     `;
@@ -341,52 +352,56 @@ export class ConversationRepository implements IConversationRepository {
         LIMIT ? OFFSET ?
       `;
 
-      const conversations = await this.conversationRepository.query(
-        dataQuery,
-        [...params, limit, offset],
-      );
+      const conversations = await this.conversationRepository.query(dataQuery, [
+        ...params,
+        limit,
+        offset,
+      ]);
 
       const totalPages = Math.ceil(totalRecords / limit);
       const hasMore = page < totalPages;
       const processedConversations = await Promise.all(
         conversations.map(async (conv: any) => ({
-              id: conv.id,
-              type: conv.type,
-              school_id: conv.school_id,
-              sender_id: conv.last_message_sender_id,
-              receiver_id: conv.last_message_receiver_id,
-              group_id: conv.group_id,
-              group_type: conv.group_type,
-              created_at: conv.created_at,
-              updated_at: conv.updated_at,
-              last_message_id: conv.last_message_id,
-              last_message: conv.last_message,
-              last_message_sender_id: conv.last_message_sender_id,
-              last_message_receiver_type: conv.other_user_type,
-              last_message_seen_at: conv.last_message_seen_at,
-              last_message_date: conv.last_message_created_at,
-              is_only_teachers_group: conv.group_type,
-              is_online: conv.group_id ? false: await this.socketService.isUserOnline(conv?.other_user_id),
-              group_name: conv.group_name,
-              group_image: conv.group_image,
-              group_creator_id: conv.created_by,
-              attachments: conv.last_message_attachments,
-              is_muted: 0,
-              muted_by_ids: null,
-              deleteMessageFlag: conv.last_message_delete_at ? 0: 1,
-              user_id:
-                conv.type === ConversationType.USER ? conv.other_user_id : null,
-              user_details:
-                conv.type === ConversationType.USER && conv.other_user_id
-                  ? {
-                      id: conv.other_user_id,
-                      name: conv.other_user_name,
-                      image: conv.other_user_profile_image,
-                      class: null,
-                      section: null
-                    }
-                  : null
-        })));
+          id: conv.id,
+          type: conv.type,
+          school_id: conv.school_id,
+          sender_id: conv.last_message_sender_id,
+          receiver_id: conv.last_message_receiver_id,
+          group_id: conv.group_id,
+          group_type: conv.group_type,
+          created_at: conv.created_at,
+          updated_at: conv.updated_at,
+          last_message_id: conv.last_message_id,
+          last_message: conv.last_message,
+          last_message_sender_id: conv.last_message_sender_id,
+          last_message_receiver_type: conv.other_user_type,
+          last_message_seen_at: conv.last_message_seen_at,
+          last_message_date: conv.last_message_created_at,
+          is_only_teachers_group: conv.group_type,
+          is_online: conv.group_id
+            ? false
+            : await this.socketService.isUserOnline(conv?.other_user_id),
+          group_name: conv.group_name,
+          group_image: conv.group_image,
+          group_creator_id: conv.created_by,
+          attachments: conv.last_message_attachments,
+          is_muted: 0,
+          muted_by_ids: null,
+          deleteMessageFlag: conv.last_message_delete_at ? 0 : 1,
+          user_id:
+            conv.type === ConversationType.USER ? conv.other_user_id : null,
+          user_details:
+            conv.type === ConversationType.USER && conv.other_user_id
+              ? {
+                  id: conv.other_user_id,
+                  name: conv.other_user_name,
+                  image: conv.other_user_profile_image,
+                  class: null,
+                  section: null,
+                }
+              : null,
+        })),
+      );
 
       const idListRows = processedConversations
         .filter(
@@ -425,7 +440,7 @@ export class ConversationRepository implements IConversationRepository {
         where: {
           id: conversation_id,
         },
-        withDeleted: false
+        withDeleted: false,
       });
 
       if (!conversation_exists) {
@@ -472,7 +487,7 @@ export class ConversationRepository implements IConversationRepository {
         totalItems: messages.length,
         totalRecords,
         status: true,
-        success: true
+        success: true,
       };
     } catch (error) {
       return {
@@ -485,5 +500,88 @@ export class ConversationRepository implements IConversationRepository {
         totalRecords: 0,
       };
     }
+  }
+
+  async getConversationMessagesWithBuffer(
+    conversationId: number,
+    limit: number,
+    offset: number, 
+  ) {
+    const bufferedRaw = await this.redis.lrange('buffer:message:create', 0, -1);
+    const buffered: any[] = bufferedRaw
+      .map((r) => JSON.parse(r))
+      .filter((m) => m.conversation_id == conversationId); 
+
+    const messages = await this.messageRepository.getConversationMessages(
+      conversationId,
+      limit,
+      offset,
+    );
+
+    const bufferedIds = new Set(buffered.map((m: any) => m.id?.toString()));
+    const merged = [
+      ...buffered,
+      ...messages.filter((m) => !bufferedIds.has(m.id?.toString())),
+    ].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+
+    const totalRecords =
+      await this.messageRepository.countConversationMessage(conversationId);
+    const bufferedNewCount = buffered.filter(
+      (b) => !messages.find((m) => m.id?.toString() === b.id?.toString()),
+    ).length;
+
+    return {
+      message: 'Messages retrieved successfully',
+      data: merged.slice(0, limit),
+      hasMore: offset + limit < totalRecords + bufferedNewCount,
+      totalRecords: totalRecords + bufferedNewCount,
+      status: true,
+      success: true,
+    };
+  }
+
+  async deleteAllMessages(request: DeleteConversationDto) {
+    const conversationExists = await this.findById(request.conversationID!);
+
+    if (!conversationExists) {
+      throw new NotFoundException('Conversation not found!');
+    }
+
+    const userDetail = await this.userService.findUserById(request.senderID!);
+    if (!userDetail) {
+      throw new NotFoundException('Sender not found!');
+    }
+
+    const messageData = {
+      conversationID: request.conversationID!,
+      senderID: request.senderID,
+      receiverID: request.receiverID,
+      groupID: request.groupID,
+      senderName: userDetail.name,
+      senderImage: userDetail.image,
+    };
+
+    await this.conversationRepository.softDelete(request.conversationID!);
+    if (Number(request.groupID)) {
+      await this.groupRepository.softDelete(Number(request.groupID));
+      await this.socketService.emitToGroupMembers(
+        Number(request.groupID),
+        'allMessagesDeleted',
+        messageData,
+      );
+    } else {
+      await this.socketService.emitToUsers(
+        [Number(request.receiverID), Number(request.senderID)],
+        'allMessagesDeleted',
+        messageData,
+      );
+    }
+    return {
+      success: true,
+      message: 'Conversation deleted successfully',
+    };
   }
 }

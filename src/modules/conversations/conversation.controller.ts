@@ -8,20 +8,13 @@ import {
   Body,
 } from '@nestjs/common';
 import { ConversationRepository } from './repositories/conversation.repository';
-import { Conversation } from './entities/conversation.entity';
 import { ConversationType } from './dto/conversations.enum';
-import { SocketService } from 'src/common/services/socket/socket.service';
 import { DeleteConversationDto } from './dto/conversation-delete.dto';
-import { UsersService } from '../users/services/users.service';
-import { GroupRepository } from '../group/repositories/group.repository';
 
 @Controller()
 export class ConversationController {
   constructor(
     private readonly conversationRepository: ConversationRepository,
-    private readonly groupRepository: GroupRepository,
-    private readonly socketService: SocketService,
-    private readonly userService: UsersService,
   ) {}
 
   @Get('latest-conversations')
@@ -74,47 +67,7 @@ export class ConversationController {
 
   @Post('deleteAllMessages')
   async remove(@Body() request: DeleteConversationDto) {
-    const conversationExists = await this.conversationRepository.findById(
-      request.conversationID!,
-    );
-
-    if (!conversationExists) {
-      throw new NotFoundException('Conversation not found!');
-    }
-
-    const userDetail = await this.userService.findUserById(request.senderID!);
-    if (!userDetail) {
-      throw new NotFoundException('Sender not found!');
-    }
-
-    const messageData = {
-      conversationID: request.conversationID!,
-      senderID: request.senderID,
-      receiverID: request.receiverID,
-      groupID: request.groupID,
-      senderName: userDetail.name,
-      senderImage: userDetail.image,
-    };
-
-    await this.conversationRepository.softDelete(request.conversationID!);
-    if (Number(request.groupID)) {
-      await this.groupRepository.softDelete(Number(request.groupID));
-      await this.socketService.emitToGroupMembers(
-        Number(request.groupID),
-        'allMessagesDeleted',
-        messageData,
-      );
-    } else {
-      await this.socketService.emitToUsers(
-        [Number(request.receiverID), Number(request.senderID)],
-        'allMessagesDeleted',
-        messageData,
-      );
-    }
-    return {
-      success: true,
-      message: 'Conversation deleted successfully',
-    };
+    return this.conversationRepository.deleteAllMessages(request);
   }
 
   @Get('conversation')
@@ -123,10 +76,13 @@ export class ConversationController {
     @Query('limit', new ParseIntPipe({ optional: true })) limit = 25,
     @Query('page', new ParseIntPipe({ optional: true })) page = 1,
   ) {
-    return this.conversationRepository.getConversationMessages(
-      conversation_id,
-      limit,
-      page,
-    );
+    const offset = (page - 1) * limit; 
+    const response =
+      await this.conversationRepository.getConversationMessagesWithBuffer(
+        conversation_id,
+        limit,
+        offset,
+      );
+    return response;
   }
 }

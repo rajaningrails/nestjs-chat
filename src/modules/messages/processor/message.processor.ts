@@ -22,10 +22,6 @@ import { UpdateUserDto } from 'src/modules/users/dto/update-user.dto';
     max: MessageProcessorConfig.max_no_of_job_per_second,
     duration: 1000,
   },
-  defaultJobOptions: {
-    removeOnComplete: true,
-    removeOnFail: false,
-  },
 })
 @Injectable()
 export class MessageProcessor
@@ -33,27 +29,33 @@ export class MessageProcessor
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(MessageProcessor.name);
-  
+
   private readonly CREATE_BUFFER_KEY = 'buffer:message:create';
   private readonly DELETE_BUFFER_KEY = 'buffer:message:delete';
   private readonly UPDATE_BUFFER_KEY = 'buffer:message:update';
   private readonly UPDATE_USER_BUFFER_KEY = 'buffer:user:update';
   private readonly USER_SEEN_BUFFER_KEY = 'buffer:message:user-seen';
   private readonly GROUP_SEEN_BUFFER_KEY = 'buffer:group-message-seen:create';
-  private readonly CONVERSATION_UPDATE_BUFFER_KEY = 'buffer:conversation:update';
-  
+  private readonly CONVERSATION_UPDATE_BUFFER_KEY =
+    'buffer:conversation:update';
+  private readonly PENDING_SEEN_BUFFER_KEY = 'buffer:message:pending-seen';
+  private readonly PENDING_GROUP_SEEN_BUFFER_KEY =
+    'buffer:group-message-seen:pending';
+
   private readonly CREATE_LOCK_KEY = 'lock:message:create:flush';
   private readonly UPDATE_LOCK_KEY = 'lock:message:update:flush';
   private readonly UPDATE_USER_LOCK_KEY = 'lock:user:update:flush';
   private readonly DELETE_LOCK_KEY = 'lock:message:delete:flush';
   private readonly USER_SEEN_LOCK_KEY = 'lock:message:user-seen:flush';
   private readonly GROUP_SEEN_LOCK_KEY = 'lock:member:group-message-seen:flush';
-  private readonly CONVERSATION_UPDATE_LOCK_KEY = 'lock:conversation:update:flush';
-  
+  private readonly CONVERSATION_UPDATE_LOCK_KEY =
+    'lock:conversation:update:flush';
+
   private readonly BATCH_SIZE = MessageProcessorConfig.batch_size || 100;
-  private readonly FLUSH_INTERVAL = MessageProcessorConfig.batch_timeout ?? 5000;
+  private readonly FLUSH_INTERVAL =
+    MessageProcessorConfig.batch_timeout ?? 5000;
   private readonly LOCK_TTL = 30000;
-  
+
   private flushInterval: NodeJS.Timeout | null = null;
   private redis!: Redis;
   private isShuttingDown = false;
@@ -63,30 +65,38 @@ export class MessageProcessor
     private readonly messageRepository: MessageRepository,
     private readonly groupService: GroupService,
     private readonly conversationService: ConversationService,
-    private readonly userService: UsersService
+    private readonly userService: UsersService,
   ) {
     super();
   }
 
   async onModuleInit() {
     this.redis = (await this.messageQueue.client) as Redis;
-    
+
     this.flushInterval = setInterval(async () => {
       if (this.isShuttingDown) return;
-      
+
       try {
-        const [createLen, updateLen, deleteLen, userSeenLen, conversationUpdateLen, groupSeenLen, syncUserLen] = await Promise.all([
+        const [
+          createLen,
+          updateLen,
+          deleteLen,
+          userSeenLen,
+          conversationUpdateLen,
+          groupSeenLen,
+          syncUserLen,
+        ] = await Promise.all([
           this.redis.llen(this.CREATE_BUFFER_KEY),
           this.redis.hlen(this.UPDATE_BUFFER_KEY),
           this.redis.scard(this.DELETE_BUFFER_KEY),
           this.redis.scard(this.USER_SEEN_BUFFER_KEY),
           this.redis.hlen(this.CONVERSATION_UPDATE_BUFFER_KEY),
           this.redis.llen(this.GROUP_SEEN_BUFFER_KEY),
-          this.redis.llen(this.UPDATE_USER_BUFFER_KEY)
+          this.redis.llen(this.UPDATE_USER_BUFFER_KEY),
         ]);
 
         const flushPromises: Promise<void>[] = [];
-        
+
         if (createLen > 0) flushPromises.push(this.flushCreateBuffer());
         if (updateLen > 0) flushPromises.push(this.flushUpdateBuffer());
         if (deleteLen > 0) flushPromises.push(this.flushDeleteBuffer());
@@ -96,7 +106,7 @@ export class MessageProcessor
         if (flushPromises.length > 0) {
           await Promise.all(flushPromises);
         }
-        
+
         if (conversationUpdateLen > 0) {
           await this.flushConversationUpdateBuffer();
         }
@@ -104,13 +114,13 @@ export class MessageProcessor
         this.logger.error('Periodic flush failed', error);
       }
     }, this.FLUSH_INTERVAL);
-    
+
     this.logger.log('Message Processor initialized with Redis batching');
   }
 
   async process(job: Job) {
     const { name, data } = job;
-    
+
     try {
       if (!data) {
         throw new Error(`Job ${name} has no data`);
@@ -144,7 +154,7 @@ export class MessageProcessor
     }
 
     await this.redis.lpush(this.CREATE_BUFFER_KEY, JSON.stringify(data));
-    
+
     if (data.conversation_id) {
       const conversationUpdate = {
         id: data.conversation_id,
@@ -152,18 +162,18 @@ export class MessageProcessor
         last_message_sender_id: data.sender_id,
         last_message_receiver_id: data.receiver_id,
         updated_at: new Date(),
-        school_id: data.school_id
+        school_id: data.school_id,
       };
-      
+
       await this.redis.hset(
         this.CONVERSATION_UPDATE_BUFFER_KEY,
         data.conversation_id.toString(),
         JSON.stringify(conversationUpdate),
       );
     }
-    
+
     const count = await this.redis.llen(this.CREATE_BUFFER_KEY);
-    
+
     if (count >= this.BATCH_SIZE) {
       setImmediate(async () => {
         try {
@@ -174,7 +184,7 @@ export class MessageProcessor
         }
       });
     }
-    
+
     return { success: true, buffered: true, operation: 'create' };
   }
 
@@ -188,9 +198,9 @@ export class MessageProcessor
       data.id.toString(),
       JSON.stringify(data),
     );
-    
+
     const count = await this.redis.hlen(this.UPDATE_BUFFER_KEY);
-    
+
     if (count >= this.BATCH_SIZE) {
       setImmediate(() => {
         this.flushUpdateBuffer().catch((err) =>
@@ -198,7 +208,7 @@ export class MessageProcessor
         );
       });
     }
-    
+
     return { success: true, buffered: true, operation: 'update' };
   }
 
@@ -209,7 +219,7 @@ export class MessageProcessor
 
     await this.redis.sadd(this.DELETE_BUFFER_KEY, data.id.toString());
     const count = await this.redis.scard(this.DELETE_BUFFER_KEY);
-    
+
     if (count >= this.BATCH_SIZE) {
       setImmediate(() => {
         this.flushDeleteBuffer().catch((err) =>
@@ -217,18 +227,36 @@ export class MessageProcessor
         );
       });
     }
-    
+
     return { success: true, buffered: true, operation: 'delete' };
   }
 
   private async bufferOneToOneSeen(data: { id: number | string }) {
-    if (!data?.id) {
-      throw new Error('Message id is required for seen');
+    if (!data?.id) throw new Error('Message id is required for seen');
+
+    const createBufferRaw = await this.redis.lrange(
+      this.CREATE_BUFFER_KEY,
+      0,
+      -1,
+    );
+    const isStillBuffered = createBufferRaw.some((raw) => {
+      try {
+        return JSON.parse(raw)?.id?.toString() === data.id.toString();
+      } catch {
+        return false;
+      }
+    });
+
+    if (isStillBuffered) {
+      await this.redis.sadd(this.PENDING_SEEN_BUFFER_KEY, data.id.toString());
+      this.logger.debug(
+        `Seen for message ${data.id} deferred — message not yet persisted`,
+      );
+    } else {
+      await this.redis.sadd(this.USER_SEEN_BUFFER_KEY, data.id.toString());
     }
 
-    await this.redis.sadd(this.USER_SEEN_BUFFER_KEY, data.id.toString());
     const count = await this.redis.scard(this.USER_SEEN_BUFFER_KEY);
-    
     if (count >= this.BATCH_SIZE) {
       setImmediate(() => {
         this.flushUserMessageSeen().catch((err) =>
@@ -236,15 +264,37 @@ export class MessageProcessor
         );
       });
     }
-    
+
     return { success: true, buffered: true, operation: 'one-to-one-seen' };
   }
 
   private async bufferGroupSeen(data: SendMessageDto) {
-    await this.redis.lpush(this.GROUP_SEEN_BUFFER_KEY, JSON.stringify(data));
+    const createBufferRaw = await this.redis.lrange(
+      this.CREATE_BUFFER_KEY,
+      0,
+      -1,
+    );
+    const isStillBuffered = createBufferRaw.some((raw) => {
+      try {
+        return JSON.parse(raw)?.id?.toString() === data.id?.toString();
+      } catch {
+        return false;
+      }
+    });
+
+    if (isStillBuffered) {
+      await this.redis.lpush(
+        this.PENDING_GROUP_SEEN_BUFFER_KEY,
+        JSON.stringify(data),
+      );
+      this.logger.debug(
+        `Group seen for message ${data.id} deferred — not yet persisted`,
+      );
+    } else {
+      await this.redis.lpush(this.GROUP_SEEN_BUFFER_KEY, JSON.stringify(data));
+    }
 
     const count = await this.redis.llen(this.GROUP_SEEN_BUFFER_KEY);
-
     if (count >= this.BATCH_SIZE) {
       this.flushGroupMessageSeen().catch((err) =>
         this.logger.error('Async flush failed', err),
@@ -332,7 +382,7 @@ export class MessageProcessor
       }
 
       const batch = rawData.map((item) => JSON.parse(item));
-      console.log(batch,'flush')
+      console.log(batch, 'flush');
       try {
         await this.groupService.groupMessageSeenBatch(batch);
       } catch (error) {
@@ -351,60 +401,125 @@ export class MessageProcessor
       this.LOCK_TTL,
       'NX',
     );
+    if (!lockAcquired) return;
 
-    if (!lockAcquired) {
-      this.logger.debug('Create flush already in progress, skipping');
-      return;
-    }
-
-    const startTime = Date.now();
-    
     try {
-      const result = await this.redis
-        .multi()
-        .lrange(this.CREATE_BUFFER_KEY, 0, -1)
-        .del(this.CREATE_BUFFER_KEY)
-        .exec();
+      const exists = await this.redis.exists(this.CREATE_BUFFER_KEY);
+      if (!exists) return;
 
-      const rawData = result?.[0]?.[1] as string[];
-      
-      if (!rawData || rawData.length === 0) {
-        return;
-      }
+      const tempKey = `${this.CREATE_BUFFER_KEY}:flushing:${Date.now()}`;
+      await this.redis.rename(this.CREATE_BUFFER_KEY, tempKey);
 
-      this.logger.log(`Flushing ${rawData.length} create operations`);
+      const rawData = await this.redis.lrange(tempKey, 0, -1);
+      await this.redis.del(tempKey);
+      if (!rawData?.length) return;
 
-      if (rawData.length > this.BATCH_SIZE * 2) {
-        await this.extendLock(this.CREATE_LOCK_KEY, this.LOCK_TTL);
-      }
-
-      const batch = rawData.map((item) => {
-        try {
-          return JSON.parse(item);
-        } catch (error) {
-          this.logger.error('Failed to parse message data', { item, error });
-          return null;
-        }
-      }).filter(Boolean);
-
-      if (batch.length === 0) {
-        return;
-      }
+      const batch = rawData.map((item) => JSON.parse(item)).filter(Boolean);
 
       try {
         await this.messageRepository.upsertBatch(batch);
-        this.logger.log(`Successfully flushed ${batch.length} create operations in ${Date.now() - startTime}ms`);
+
+        await this.promotePendingSeens(batch.map((m) => m.id?.toString()));
+
+        await this.flushConversationUpdateBuffer();
       } catch (error) {
-        this.logger.error('Create batch upsert failed, moving to DLQ', error);
+        if (batch.length > 0) {
+          await this.redis.lpush(
+            this.CREATE_BUFFER_KEY,
+            ...batch.map((b) => JSON.stringify(b)),
+          );
+        }
         await this.moveToDLQ('create', batch, error);
-        
-        await this.clearRelatedConversationUpdates(batch);
       }
-    } catch (error) {
-      this.logger.error('Create flush operation failed', error);
-      throw error;
     } finally {
       await this.redis.del(this.CREATE_LOCK_KEY);
+    }
+  }
+
+  private async promotePendingSeens(persistedMessageIds: string[]) {
+    if (!persistedMessageIds.length) return;
+    const persistedSet = new Set(persistedMessageIds);
+
+    try {
+      const pendingOneToOne = await this.redis.smembers(
+        this.PENDING_SEEN_BUFFER_KEY,
+      );
+
+      const readyOneToOne = pendingOneToOne.filter((id) =>
+        persistedSet.has(id),
+      );
+
+      if (readyOneToOne.length > 0) {
+        const pipeline = this.redis.pipeline();
+        readyOneToOne.forEach((id) => {
+          pipeline.srem(this.PENDING_SEEN_BUFFER_KEY, id);
+          pipeline.sadd(this.USER_SEEN_BUFFER_KEY, id);
+        });
+        await pipeline.exec();
+        this.logger.log(
+          `Promoted ${readyOneToOne.length} pending one-to-one seens`,
+        );
+      }
+
+      const pendingGroupRaw = await this.redis.lrange(
+        this.PENDING_GROUP_SEEN_BUFFER_KEY,
+        0,
+        -1,
+      );
+
+      if (pendingGroupRaw.length > 0) {
+        const pendingGroup = pendingGroupRaw
+          .map((r) => {
+            try {
+              return JSON.parse(r);
+            } catch {
+              return null;
+            }
+          })
+          .filter(Boolean);
+
+        const readyGroup = pendingGroup.filter((d) =>
+          persistedSet.has(d.message_id?.toString()),
+        );
+        const stillWaiting = pendingGroup.filter(
+          (d) => !persistedSet.has(d.message_id?.toString()),
+        );
+
+        if (readyGroup.length > 0 || stillWaiting.length > 0) {
+          const pipeline = this.redis.pipeline();
+
+          pipeline.del(this.PENDING_GROUP_SEEN_BUFFER_KEY);
+
+          if (stillWaiting.length > 0) {
+            stillWaiting.forEach((d) =>
+              pipeline.lpush(
+                this.PENDING_GROUP_SEEN_BUFFER_KEY,
+                JSON.stringify(d),
+              ),
+            );
+          }
+
+          if (readyGroup.length > 0) {
+            readyGroup.forEach((d) =>
+              pipeline.lpush(this.GROUP_SEEN_BUFFER_KEY, JSON.stringify(d)),
+            );
+          }
+
+          await pipeline.exec();
+          this.logger.log(
+            `Promoted ${readyGroup.length} pending group seens, ${stillWaiting.length} still waiting`,
+          );
+        }
+      }
+
+      const flushPromises: Promise<void>[] = [];
+      if (readyOneToOne?.length > 0)
+        flushPromises.push(this.flushUserMessageSeen());
+      if (pendingGroupRaw.length > 0)
+        flushPromises.push(this.flushGroupMessageSeen());
+      if (flushPromises.length > 0) await Promise.all(flushPromises);
+    } catch (error) {
+      this.logger.error('Failed to promote pending seens', error);
     }
   }
 
@@ -432,7 +547,7 @@ export class MessageProcessor
         .exec();
 
       const hashData = result?.[0]?.[1] as Record<string, string>;
-      
+
       if (!hashData || Object.keys(hashData).length === 0) {
         return;
       }
@@ -444,14 +559,16 @@ export class MessageProcessor
         await this.extendLock(this.UPDATE_LOCK_KEY, this.LOCK_TTL);
       }
 
-      const batch = Object.values(hashData).map((item) => {
-        try {
-          return JSON.parse(item);
-        } catch (error) {
-          this.logger.error('Failed to parse update data', { item, error });
-          return null;
-        }
-      }).filter(Boolean);
+      const batch = Object.values(hashData)
+        .map((item) => {
+          try {
+            return JSON.parse(item);
+          } catch (error) {
+            this.logger.error('Failed to parse update data', { item, error });
+            return null;
+          }
+        })
+        .filter(Boolean);
 
       if (batch.length === 0) {
         return;
@@ -459,7 +576,9 @@ export class MessageProcessor
 
       try {
         await this.messageRepository.upsertBatch(batch);
-        this.logger.log(`Successfully flushed ${batch.length} update operations in ${Date.now() - startTime}ms`);
+        this.logger.log(
+          `Successfully flushed ${batch.length} update operations in ${Date.now() - startTime}ms`,
+        );
       } catch (error) {
         this.logger.error('Update batch upsert failed, moving to DLQ', error);
         await this.moveToDLQ('update', batch, error);
@@ -496,7 +615,7 @@ export class MessageProcessor
         .exec();
 
       const ids = result?.[0]?.[1] as number[];
-      
+
       if (!ids || ids.length === 0) {
         return;
       }
@@ -509,9 +628,14 @@ export class MessageProcessor
 
       try {
         await this.messageRepository.deleteBatch(ids);
-        this.logger.log(`Successfully flushed ${ids.length} delete operations in ${Date.now() - startTime}ms`);
+        this.logger.log(
+          `Successfully flushed ${ids.length} delete operations in ${Date.now() - startTime}ms`,
+        );
       } catch (error) {
-        this.logger.error('Delete batch operation failed, moving to DLQ', error);
+        this.logger.error(
+          'Delete batch operation failed, moving to DLQ',
+          error,
+        );
         await this.moveToDLQ('delete', ids, error);
       }
     } catch (error) {
@@ -546,7 +670,7 @@ export class MessageProcessor
         .exec();
 
       const ids = result?.[0]?.[1] as number[];
-      
+
       if (!ids || ids.length === 0) {
         return;
       }
@@ -559,9 +683,14 @@ export class MessageProcessor
 
       try {
         await this.messageRepository.oneToOneChatMessageSeenBatch(ids);
-        this.logger.log(`Successfully flushed ${ids.length} user seen operations in ${Date.now() - startTime}ms`);
+        this.logger.log(
+          `Successfully flushed ${ids.length} user seen operations in ${Date.now() - startTime}ms`,
+        );
       } catch (error) {
-        this.logger.error('User seen batch operation failed, moving to DLQ', error);
+        this.logger.error(
+          'User seen batch operation failed, moving to DLQ',
+          error,
+        );
         await this.moveToDLQ('one-to-one-seen', ids, error);
       }
     } catch (error) {
@@ -586,7 +715,9 @@ export class MessageProcessor
     );
 
     if (!lockAcquired) {
-      this.logger.debug('Conversation update flush already in progress, skipping');
+      this.logger.debug(
+        'Conversation update flush already in progress, skipping',
+      );
       return;
     }
 
@@ -600,7 +731,7 @@ export class MessageProcessor
         .exec();
 
       const hashData = result?.[0]?.[1] as Record<string, string>;
-      
+
       if (!hashData || Object.keys(hashData).length === 0) {
         return;
       }
@@ -612,14 +743,19 @@ export class MessageProcessor
         await this.extendLock(this.CONVERSATION_UPDATE_LOCK_KEY, this.LOCK_TTL);
       }
 
-      const batch = Object.values(hashData).map((item) => {
-        try {
-          return JSON.parse(item);
-        } catch (error) {
-          this.logger.error('Failed to parse conversation update data', { item, error });
-          return null;
-        }
-      }).filter(Boolean);
+      const batch = Object.values(hashData)
+        .map((item) => {
+          try {
+            return JSON.parse(item);
+          } catch (error) {
+            this.logger.error('Failed to parse conversation update data', {
+              item,
+              error,
+            });
+            return null;
+          }
+        })
+        .filter(Boolean);
 
       if (batch.length === 0) {
         return;
@@ -627,9 +763,14 @@ export class MessageProcessor
 
       try {
         await this.conversationService.upsertBatch(batch);
-        this.logger.log(`Successfully flushed ${batch.length} conversation updates in ${Date.now() - startTime}ms`);
+        this.logger.log(
+          `Successfully flushed ${batch.length} conversation updates in ${Date.now() - startTime}ms`,
+        );
       } catch (error) {
-        this.logger.error('Conversation update batch failed, moving to DLQ', error);
+        this.logger.error(
+          'Conversation update batch failed, moving to DLQ',
+          error,
+        );
         await this.moveToDLQ('conversation-update', batch, error);
       }
     } catch (error) {
@@ -646,12 +787,17 @@ export class MessageProcessor
   private async clearRelatedConversationUpdates(failedMessages: MessageDto[]) {
     try {
       const conversationIds = failedMessages
-        .map(msg => msg.conversation_id?.toString())
+        .map((msg) => msg.conversation_id?.toString())
         .filter(Boolean);
-      
+
       if (conversationIds.length > 0) {
-        await this.redis.hdel(this.CONVERSATION_UPDATE_BUFFER_KEY, ...conversationIds);
-        this.logger.warn(`Cleared ${conversationIds.length} conversation updates due to message flush failure`);
+        await this.redis.hdel(
+          this.CONVERSATION_UPDATE_BUFFER_KEY,
+          ...conversationIds,
+        );
+        this.logger.warn(
+          `Cleared ${conversationIds.length} conversation updates due to message flush failure`,
+        );
       }
     } catch (error) {
       this.logger.error('Failed to clear conversation updates', error);
@@ -668,7 +814,14 @@ export class MessageProcessor
   }
 
   private async moveToDLQ(
-    operation: 'create' | 'update' | 'delete' | 'one-to-one-seen' | 'group-message-seen' | 'conversation-update' | 'user-sync',
+    operation:
+      | 'create'
+      | 'update'
+      | 'delete'
+      | 'one-to-one-seen'
+      | 'group-message-seen'
+      | 'conversation-update'
+      | 'user-sync',
     data: any[],
     error: any,
   ) {
@@ -682,10 +835,10 @@ export class MessageProcessor
         dataCount: data.length,
         data,
       };
-      
+
       await this.redis.lpush(dlqKey, JSON.stringify(entry));
       await this.redis.ltrim(dlqKey, 0, 999);
-      
+
       this.logger.warn(`Moved ${data.length} items to DLQ: ${dlqKey}`);
     } catch (dlqError) {
       this.logger.error('Failed to move items to DLQ', dlqError);
@@ -694,14 +847,14 @@ export class MessageProcessor
 
   async onModuleDestroy() {
     this.isShuttingDown = true;
-    
+
     if (this.flushInterval) {
       clearInterval(this.flushInterval);
       this.logger.log('Stopped periodic flush interval');
     }
 
     this.logger.log('Flushing all buffers before shutdown...');
-    
+
     try {
       await Promise.all([
         this.flushCreateBuffer(),
@@ -709,11 +862,11 @@ export class MessageProcessor
         this.flushDeleteBuffer(),
         this.flushUserMessageSeen(),
         this.flushGroupMessageSeen(),
-        this.flushUserSync()
+        this.flushUserSync(),
       ]);
-      
+
       await this.flushConversationUpdateBuffer();
-      
+
       this.logger.log('All buffers flushed successfully');
     } catch (error) {
       this.logger.error('Error during final flush', error);

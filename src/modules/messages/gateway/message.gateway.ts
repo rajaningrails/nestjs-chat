@@ -46,8 +46,9 @@ export class MessageGateway
     private readonly presenceService: PresenceService,
   ) {}
 
-  afterInit(server: Server) {
+  async afterInit(server: Server) {
     this.socketService.setServer(server);
+    await this.socketService.clearAllSocketMappings();
   }
 
   async handleConnection(client: AuthenticatedSocket) {

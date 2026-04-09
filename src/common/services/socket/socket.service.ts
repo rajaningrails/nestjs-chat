@@ -86,12 +86,60 @@ export class SocketService {
       const userKey = `${this.USER_SOCKET_PREFIX}${userId}`;
       const sockets = await this.redis.smembers(userKey);
 
-      return sockets.filter((socketId) =>
-        this.server?.sockets.sockets.has(socketId),
-      );
+      const activeSockets: string[] = [];
+      const deadSockets: string[] = [];
+
+      for (const socketId of sockets) {
+        if (this.server?.sockets.sockets.has(socketId)) {
+          activeSockets.push(socketId);
+        } else {
+          deadSockets.push(socketId);
+        }
+      }
+
+      if (deadSockets.length > 0) {
+        const pipeline = this.redis.pipeline();
+        deadSockets.forEach((id) => {
+          pipeline.srem(userKey, id);
+          pipeline.del(`${this.SOCKET_USER_PREFIX}${id}`);
+        });
+        await pipeline.exec();
+      }
+
+      return activeSockets;
     } catch (error) {
       this.logger.error(`Failed to get sockets for user ${userId}:`, error);
       return [];
+    }
+  }
+
+  async clearAllSocketMappings(): Promise<void> {
+    try {
+      const patterns = [
+        `${this.USER_SOCKET_PREFIX}*`,
+        `${this.SOCKET_USER_PREFIX}*`,
+      ];
+
+      for (const pattern of patterns) {
+        let cursor = '0';
+        do {
+          const [newCursor, keys] = await this.redis.scan(
+            cursor,
+            'MATCH',
+            pattern,
+            'COUNT',
+            100,
+          );
+          cursor = newCursor;
+          if (keys.length > 0) {
+            await this.redis.del(...keys);
+          }
+        } while (cursor !== '0');
+      }
+
+      this.logger.log('Cleared all stale socket mappings on startup');
+    } catch (error) {
+      this.logger.error('Failed to clear socket mappings:', error);
     }
   }
 
@@ -115,7 +163,7 @@ export class SocketService {
   async getGroupMemberIds(groupId: number): Promise<number[]> {
     try {
       const cacheKey = `${this.GROUP_MEMBERS_PREFIX}${groupId}`;
-      
+
       // Try to get from cache first
       const cached = await this.redis.smembers(cacheKey);
       if (cached.length > 0) {
@@ -137,7 +185,10 @@ export class SocketService {
 
       return memberIds;
     } catch (error) {
-      this.logger.error(`Failed to get group members for group ${groupId}:`, error);
+      this.logger.error(
+        `Failed to get group members for group ${groupId}:`,
+        error,
+      );
       return [];
     }
   }
@@ -150,7 +201,10 @@ export class SocketService {
       const cacheKey = `${this.GROUP_MEMBERS_PREFIX}${groupId}`;
       await this.redis.del(cacheKey);
     } catch (error) {
-      this.logger.error(`Failed to invalidate cache for group ${groupId}:`, error);
+      this.logger.error(
+        `Failed to invalidate cache for group ${groupId}:`,
+        error,
+      );
     }
   }
 
@@ -215,7 +269,7 @@ export class SocketService {
       const uniqueUserIds = [...new Set(userIds)];
       const filteredUserIds = uniqueUserIds.filter(
         (userId) => userId !== excludeUserId,
-      )
+      );
       for (let i = 0; i < filteredUserIds.length; i += batchSize) {
         const batch = filteredUserIds.slice(i, i + batchSize);
         await Promise.all(
@@ -280,18 +334,20 @@ export class SocketService {
 
       // Filter out excluded users
       let targetUserIds = memberIds;
-      
+
       if (excludeUserId) {
         targetUserIds = targetUserIds.filter((id) => id !== excludeUserId);
       }
-      
+
       if (excludeUserIds && excludeUserIds.length > 0) {
         const excludeSet = new Set(excludeUserIds);
         targetUserIds = targetUserIds.filter((id) => !excludeSet.has(id));
       }
 
       if (targetUserIds.length === 0) {
-        this.logger.debug(`No target users after exclusions for group ${groupId}`);
+        this.logger.debug(
+          `No target users after exclusions for group ${groupId}`,
+        );
         return;
       }
 
@@ -310,7 +366,10 @@ export class SocketService {
       const count = await this.redis.scard(userKey);
       return count > 0;
     } catch (error) {
-      this.logger.error(`Failed to check online status for user ${userId}:`, error);
+      this.logger.error(
+        `Failed to check online status for user ${userId}:`,
+        error,
+      );
       return false;
     }
   }

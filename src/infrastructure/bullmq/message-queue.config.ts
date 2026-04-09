@@ -9,11 +9,8 @@ export const messageQueueConfig = BullModule.registerQueue({
       type: 'exponential',
       delay: 1000,
     },
-    removeOnComplete: {
-      count: 500, 
-      age: 3600, 
-    },
+    removeOnComplete: true,
     priority: MessageProcessorConfig.priority,
-    removeOnFail: false
+    removeOnFail: false,
   },
 });

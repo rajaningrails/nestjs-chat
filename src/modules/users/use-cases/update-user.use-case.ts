@@ -31,6 +31,8 @@ export class UpdateUserUseCase {
         type: request.type,
         school_id: request.app_id,
         user_id: request.app_user_id,
+        class: request.class,
+        section: request.section,
       },
       {
         priority: 3,

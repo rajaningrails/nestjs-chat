@@ -21,4 +21,12 @@ export class SyncUserDto {
   @IsEnum(UserType)
   @IsNotEmpty()
   type: UserType;
+
+  @IsOptional()
+  @IsString()
+  class: string;
+
+  @IsOptional()
+  @IsString()
+  section: string;
 }

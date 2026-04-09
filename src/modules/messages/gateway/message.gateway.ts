@@ -16,6 +16,8 @@ import { TypingService } from 'src/common/services/socket/typing.service';
 import { MessageDto } from '../dto/message.dto';
 import { User } from 'src/modules/users/entities/user.entity';
 import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
+import { S3PresignedUrlService } from 'src/common/services/aws.service';
+import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
 
 interface AuthenticatedSocket extends Socket {
   userId?: number;
@@ -44,6 +46,7 @@ export class MessageGateway
     private readonly socketService: SocketService,
     private readonly typingService: TypingService,
     private readonly presenceService: PresenceService,
+    private readonly s3Service: S3PresignedUrlService,
   ) {}
 
   async afterInit(server: Server) {
@@ -299,15 +302,21 @@ export class MessageGateway
     sender_user_details: User,
     receiver_user_details: User | null,
     conversation: Conversation,
+    group_detail: ChatGroup | null
   ) {
     try {
+      const presignedUrls = await Promise.all([
+        this.s3Service.generatePresignedUrls(message.attachments!),
+        this.s3Service.generatePresignedUrl(sender_user_details.image!),
+        this.s3Service.generatePresignedUrl(receiver_user_details?.image!),
+      ])
       const messageData = {
         status: true,
         message: 'Message sent successfully',
         data: {
           id: message.id,
           message: message?.message || '',
-          attachments: message.attachments || [],
+          attachments: presignedUrls?.[0] ?? [],
           conversation_id: message.conversation_id,
           seen_at: null,
           delete_at: null,
@@ -319,7 +328,7 @@ export class MessageGateway
           chat_reply_id: null,
           created_at: new Date(),
           updated_at: new Date(),
-          receiver_image: receiver_user_details?.image,
+          receiver_image: presignedUrls?.[2],
           isOnline: message?.receiver_id
             ? this.socketService.isUserOnline(message.receiver_id!)
             : false,
@@ -327,7 +336,7 @@ export class MessageGateway
           user_details: {
             id: sender_user_details?.user_id?.toString(),
             name: sender_user_details?.name,
-            image: sender_user_details?.image,
+            image: presignedUrls?.[1],
             level: sender_user_details?.type,
           },
         },
@@ -350,20 +359,20 @@ export class MessageGateway
         last_message: message?.message,
         is_only_teachers_group: conversation.group_type,
         last_message_receiver_type: receiver_user_details?.type,
-        attachments: message.attachments,
+        attachments: presignedUrls?.[0] ?? [],
         isOnline: message?.receiver_id
           ? this.socketService.isUserOnline(message.receiver_id!)
           : false,
         is_online: message?.receiver_id
           ? this.socketService.isUserOnline(message.receiver_id!)
           : false,
-        group_name: '',
+        group_name: group_detail?.group_name,
         isGroupMessage: message?.group_id ? true : false,
-        group_image: '',
+        group_image: group_detail?.group_image,
         user_details: {
           id: sender_user_details?.user_id?.toString(),
           name: sender_user_details?.name,
-          image: sender_user_details?.image,
+          image: presignedUrls?.[1],
           level: sender_user_details?.type,
         },
       };

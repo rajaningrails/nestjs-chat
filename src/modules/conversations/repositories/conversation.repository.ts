@@ -13,6 +13,7 @@ import { RedisService } from 'src/common/services/redis.service';
 import { DeleteConversationDto } from '../dto/conversation-delete.dto';
 import { GroupRepository } from 'src/modules/group/repositories/group.repository';
 import { UsersService } from 'src/modules/users/services/users.service';
+import { S3PresignedUrlService } from 'src/common/services/aws.service';
 
 @Injectable()
 export class ConversationRepository implements IConversationRepository {
@@ -24,6 +25,7 @@ export class ConversationRepository implements IConversationRepository {
     private readonly redisService: RedisService,
     private readonly groupRepository: GroupRepository,
     private readonly userService: UsersService,
+    private readonly s3Service: S3PresignedUrlService,
   ) {}
 
   private get redis() {
@@ -505,39 +507,77 @@ export class ConversationRepository implements IConversationRepository {
   async getConversationMessagesWithBuffer(
     conversationId: number,
     limit: number,
-    offset: number, 
+    offset: number,
   ) {
-    const bufferedRaw = await this.redis.lrange('buffer:message:create', 0, -1);
-    const buffered: any[] = bufferedRaw
-      .map((r) => JSON.parse(r))
-      .filter((m) => m.conversation_id == conversationId); 
+    const [bufferedRaw, dbMessages, totalRecords] = await Promise.all([
+      this.redis.lrange('buffer:message:create', 0, -1),
+      this.messageRepository.getConversationMessages(
+        conversationId,
+        limit,
+        offset,
+      ),
+      this.messageRepository.countConversationMessage(conversationId),
+    ]);
 
-    const messages = await this.messageRepository.getConversationMessages(
-      conversationId,
-      limit,
-      offset,
+    const buffered: any[] = bufferedRaw
+      .map((r) => {
+        try {
+          return JSON.parse(r);
+        } catch {
+          return null;
+        }
+      })
+      .filter((m) => m && m.conversation_id == conversationId);
+
+    const bufferedIds = new Set(buffered.map((m) => m.id?.toString()));
+    const uniqueDbMessages = dbMessages.filter(
+      (m) => !bufferedIds.has(m.id?.toString()),
     );
 
-    const bufferedIds = new Set(buffered.map((m: any) => m.id?.toString()));
-    const merged = [
-      ...buffered,
-      ...messages.filter((m) => !bufferedIds.has(m.id?.toString())),
-    ].sort(
+    const [presignedDbMessages, presignedBuffered] = await Promise.all([
+      Promise.all(
+        uniqueDbMessages.map(async (msg) => {
+          if (msg.attachments?.length) {
+            return {
+              ...msg,
+              attachments: await this.s3Service.generatePresignedUrls(
+                msg.attachments,
+              ),
+            };
+          }
+          return msg;
+        }),
+      ),
+      Promise.all(
+        buffered.map(async (msg) => {
+          if (msg.attachments?.length) {
+            return {
+              ...msg,
+              attachments: await this.s3Service.generatePresignedUrls(
+                msg.attachments,
+              ),
+            };
+          }
+          return msg;
+        }),
+      ),
+    ]);
+
+    const merged = [...presignedBuffered, ...presignedDbMessages].sort(
       (a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
 
-    const totalRecords =
-      await this.messageRepository.countConversationMessage(conversationId);
     const bufferedNewCount = buffered.filter(
-      (b) => !messages.find((m) => m.id?.toString() === b.id?.toString()),
+      (b) => !dbMessages.find((m) => m.id?.toString() === b.id?.toString()),
     ).length;
+    const adjustedTotal = totalRecords + bufferedNewCount;
 
     return {
       message: 'Messages retrieved successfully',
       data: merged.slice(0, limit),
-      hasMore: offset + limit < totalRecords + bufferedNewCount,
-      totalRecords: totalRecords + bufferedNewCount,
+      hasMore: offset + limit < adjustedTotal,
+      totalRecords: adjustedTotal,
       status: true,
       success: true,
     };

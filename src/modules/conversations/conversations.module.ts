@@ -8,13 +8,15 @@ import { ConversationService } from './services/conversation.service';
 import { MessageModule } from '../messages/message.module';
 import { UsersModule } from '../users/users.module';
 import { GroupModule } from '../group/group.module';
+import { S3Module } from 'src/infrastructure/aws/aws.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Conversation]),
     forwardRef(() => MessageModule),
     UsersModule,
-    GroupModule
+    GroupModule,
+    S3Module
   ],
   controllers: [ConversationController],
   providers: [

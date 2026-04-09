@@ -17,6 +17,7 @@ import { DeleteMessageUseCase } from './use-cases/delete-message.use-case';
 import { MessageSeenUseCase } from './use-cases/message-seen.use-case';
 import { GroupModule } from '../group/group.module';
 import { ConversationsModule } from '../conversations/conversations.module';
+import { S3Module } from 'src/infrastructure/aws/aws.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ConversationsModule } from '../conversations/conversations.module';
     forwardRef(() => ConversationsModule),
     forwardRef(() => GroupModule),
     UsersModule,
+    S3Module
   ],
   controllers: [MessageController],
   providers: [

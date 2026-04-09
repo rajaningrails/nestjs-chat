@@ -11,57 +11,125 @@ import { UsersService } from 'src/modules/users/services/users.service';
 import { ConversationService } from 'src/modules/conversations/services/conversation.service';
 import { SendMessageDto } from '../dto/send-message.dto';
 import { MessageGateway } from '../gateway/message.gateway';
-import { User } from 'src/modules/users/entities/user.entity';
+import { GroupRepository } from 'src/modules/group/repositories/group.repository';
 
 @Injectable()
 export class SendMessageUseCase {
   constructor(
     private readonly conversationService: ConversationService,
     private readonly userService: UsersService,
-    private readonly messagesService: MessageService,
-    private readonly messageGateway: MessageGateway
-  ) { }
+    private readonly messageService: MessageService,
+    private readonly messageGateway: MessageGateway,
+    private readonly groupRepository: GroupRepository,
+  ) {}
 
   async execute(request: Partial<SendMessageDto>) {
-    if (request.message && request.message.trim().length > 0) {
-      if (profanity.exists(request.message)) {
-        throw new BadRequestException('Profanity not allowed');
-      }
-    }
-    const existingConversation = await this.conversationService.findById(
-      request.conversation_id!,
+    this.validateRequest(request);
+
+    const conversation = await this.getConversation(request.conversation_id!);
+
+    const isGroup = !!conversation.group_id;
+
+    const messageData = this.buildMessageData(request, conversation, isGroup);
+
+    await this.messageService.createMessage(messageData);
+
+    const { sender, receiver, group } = await this.fetchRelatedEntities(
+      request,
+      conversation,
     );
-    if (!existingConversation) {
-      throw new NotFoundException('Conversation does not exists');
+
+    this.emitMessageEvent(messageData, sender, receiver, group, conversation);
+
+    return this.buildResponse(messageData, sender, request);
+  }
+
+  private validateRequest(request: Partial<SendMessageDto>) {
+    if (!request.conversation_id || !request.message_sender_id) {
+      throw new BadRequestException('Missing required fields');
     }
-    const messageData: MessageDto = {
+
+    const messageText = request.message?.trim();
+
+    if (messageText && profanity.exists(messageText)) {
+      throw new BadRequestException('Profanity not allowed');
+    }
+  }
+
+  private async getConversation(conversationId: number) {
+    const conversation =
+      await this.conversationService.findById(conversationId);
+
+    if (!conversation) {
+      throw new NotFoundException('Conversation does not exist');
+    }
+
+    return conversation;
+  }
+
+  private buildMessageData(
+    request: Partial<SendMessageDto>,
+    conversation: any,
+    isGroup: boolean,
+  ): MessageDto {
+    return {
       id: generateSafeNumericId(),
       conversation_id: request.conversation_id!,
       sender_id: request.message_sender_id!,
-      receiver_id: !existingConversation.group_id ? request.message_receiver_id : undefined,
-      message: request.message,
+      message: request.message?.trim(),
       school_id: request.school_id!,
       attachments: request.attachments,
-      group_id: existingConversation.group_id,
+      group_id: conversation.group_id,
+      ...(isGroup ? {} : { receiver_id: request.message_receiver_id }),
     };
+  }
 
-    if (existingConversation.group_id || !request.message_receiver_id) {
-      delete messageData.receiver_id
-    }
-
-    await this.messagesService.createMessage(messageData);
-
-    const sender_user_details = await this.userService.findUserById(
+  private async fetchRelatedEntities(
+    request: Partial<SendMessageDto>,
+    conversation: any,
+  ) {
+    const senderPromise = this.userService.findUserById(
       request.message_sender_id!,
     );
 
-    let receiver_user_details: User | null = null;
-    if (request.message_receiver_id) {
-      receiver_user_details = await this.userService.findUserById(
-        request.message_receiver_id!,
-      );
-    }
-    await this.messageGateway.emitNewMessage(messageData, sender_user_details!, receiver_user_details, existingConversation)
+    const receiverPromise = request.message_receiver_id
+      ? this.userService.findUserById(request.message_receiver_id)
+      : Promise.resolve(null);
+
+    const groupPromise = conversation.group_id
+      ? this.groupRepository.findById(conversation.group_id)
+      : Promise.resolve(null);
+
+    const [sender, receiver, group] = await Promise.all([
+      senderPromise,
+      receiverPromise,
+      groupPromise,
+    ]);
+
+    return { sender, receiver, group };
+  }
+
+  private emitMessageEvent(
+    messageData: MessageDto,
+    sender: any,
+    receiver: any,
+    group: any,
+    conversation: any,
+  ) {
+    this.messageGateway.emitNewMessage(
+      messageData,
+      sender,
+      receiver,
+      conversation,
+      group,
+    );
+  }
+
+  private buildResponse(
+    messageData: MessageDto,
+    sender: any,
+    request: Partial<SendMessageDto>,
+  ) {
     return {
       messageId: messageData.id,
       message_sent: messageData.message,
@@ -75,10 +143,10 @@ export class SendMessageUseCase {
       group_id: request.group_id,
       is_group: !!request.group_id,
       user_details: {
-        id: sender_user_details?.user_id,
-        name: sender_user_details?.name,
-        image: sender_user_details?.image,
-        level: sender_user_details?.type,
+        id: sender?.user_id,
+        name: sender?.name,
+        image: sender?.image,
+        level: sender?.type,
       },
     };
   }

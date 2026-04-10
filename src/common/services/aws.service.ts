@@ -55,6 +55,7 @@ export class S3PresignedUrlService {
     urls: string[],
     expiryTime = 600,
   ): Promise<string[]> {
+    if(!urls.length) return urls;
     return Promise.all(
       urls.map((url) => this.generatePresignedUrl(url, expiryTime)),
     );

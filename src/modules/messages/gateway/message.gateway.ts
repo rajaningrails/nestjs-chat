@@ -302,14 +302,15 @@ export class MessageGateway
     sender_user_details: User,
     receiver_user_details: User | null,
     conversation: Conversation,
-    group_detail: ChatGroup | null
+    group_detail: ChatGroup | null,
   ) {
     try {
       const presignedUrls = await Promise.all([
         this.s3Service.generatePresignedUrls(message.attachments!),
         this.s3Service.generatePresignedUrl(sender_user_details.image!),
         this.s3Service.generatePresignedUrl(receiver_user_details?.image!),
-      ])
+      ]);
+      console.log('presignedUrls', presignedUrls);
       const messageData = {
         status: true,
         message: 'Message sent successfully',
@@ -401,7 +402,10 @@ export class MessageGateway
         );
       }
     } catch (error) {
-      this.logger.error('Failed to emit new message event:', error);
+      this.logger.error(
+        'Failed to emit new message event',
+        JSON.stringify(error),
+      );
     }
   }
 

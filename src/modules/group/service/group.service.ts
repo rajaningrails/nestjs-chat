@@ -15,6 +15,7 @@ import { MessageRepository } from 'src/modules/messages/repositories/message.rep
 import { generateSafeNumericId } from 'src/utils/helpers';
 import { UserRepository } from 'src/modules/users/repositories/user.repository';
 import { SocketService } from 'src/common/services/socket/socket.service';
+import { S3PresignedUrlService } from 'src/common/services/aws.service';
 @Injectable()
 export class GroupService {
   constructor(
@@ -23,6 +24,7 @@ export class GroupService {
     private readonly messageRepository: MessageRepository,
     private readonly userRepository: UserRepository,
     private readonly socketService: SocketService,
+    private readonly s3Service: S3PresignedUrlService
   ) {}
 
   async createGroup(payload: {
@@ -59,13 +61,16 @@ export class GroupService {
         user_id: m.user_id,
       })),
     );
+    const s3ServiceImage = await this.s3Service.generatePresignedUrl(
+      groupResponse?.group_image!
+    )
     await this.socketService.emitToGroupMembers(
       groupResponse?.id,
       'group-created',
       {
         group_id: groupResponse?.id,
         group_name: groupResponse?.group_name,
-        group_image: groupResponse?.group_image,
+        group_image: s3ServiceImage,
         last_message: 'New group has been created',
         conversation_id: conversation_id,
         last_message_id: message_id,

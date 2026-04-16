@@ -18,6 +18,7 @@ import { ThrottleModule } from './common/throttler/throttler.module';
 import { TasksModule } from './infrastructure/job/task.module';
 import { GroupModule } from './modules/group/group.module';
 import { DLQModule } from './modules/dlq/dlq.module';
+import { S3Module } from './infrastructure/aws/aws.module';
 
 @Module({
   imports: [

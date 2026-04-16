@@ -96,3 +96,13 @@ export class GetGroupDto {
   @IsPositive()
   group_id: number;
 }
+
+export class GetGroupNameDto {
+  @IsNumberString()
+  @IsNotEmpty({ message: 'school id is required' })
+  school_id: number;
+
+  @IsNumberString()
+  @IsNotEmpty({ message: 'user id is required' })
+  user_id: number;
+}

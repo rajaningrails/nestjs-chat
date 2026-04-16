@@ -1,4 +1,4 @@
-import { CreateChatGroupDto, UpdateGroupDto } from '../dto/chat-group.dto';
+import { CreateChatGroupDto, GetGroupNameDto, UpdateGroupDto } from '../dto/chat-group.dto';
 import { ChatGroup } from '../entities/chat-group.entity';
 
 export const IGroupRepositoryToken = Symbol('IGroupRepository');
@@ -50,9 +50,8 @@ export interface IGroupRepository {
     studentDetails,
   }: CreateChatGroupDto);
 
-  getGroupNamesByUserId(
-    school_id: number,
-    user_id: number,
+  getGroupNames(
+    payload: GetGroupNameDto
   ): Promise<ChatGroup[] | null>;
 
   findByIdWithGroupMembers(id: number): Promise<ChatGroup | null>;

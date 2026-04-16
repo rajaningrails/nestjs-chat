@@ -12,6 +12,7 @@ import { UpdateGroupUseCase } from './use-cases/update-group.use-case';
 import { GroupService } from './service/group.service';
 import { GroupMessageSeen } from './entities/chat-group-message-seen.entity';
 import { ConversationsModule } from '../conversations/conversations.module';
+import { S3Module } from 'src/infrastructure/aws/aws.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { ConversationsModule } from '../conversations/conversations.module';
     forwardRef(() => ConversationsModule), // Add forwardRef
     forwardRef(() => MessageModule), // Already added
     UsersModule,
+    S3Module
   ],
   controllers: [GroupController],
   providers: [

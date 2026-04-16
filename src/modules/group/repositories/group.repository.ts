@@ -7,7 +7,11 @@ import {
   IGroupRepository,
   IRepositoryGroupResponse,
 } from './group.repository.interface';
-import { CreateChatGroupDto, UpdateGroupDto } from '../dto/chat-group.dto';
+import {
+  CreateChatGroupDto,
+  GetGroupNameDto,
+  UpdateGroupDto,
+} from '../dto/chat-group.dto';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
 import { CreateChatGroupMemberDto } from '../dto/chat-group-member.dto';
 import { GroupMessageSeen } from '../entities/chat-group-message-seen.entity';
@@ -111,7 +115,7 @@ export class GroupRepository implements IGroupRepository {
       user_id: p.seen_update_sender_id,
       group_id: p.group_id,
     }));
-    console.log('executed')
+    console.log('executed');
     await this.groupMessageSeenRepo
       .createQueryBuilder()
       .insert()
@@ -208,18 +212,25 @@ export class GroupRepository implements IGroupRepository {
     });
   }
 
-  async getGroupNamesByUserId(group_id: number): Promise<ChatGroup[] | null> {
-    console.log({ group_id });
-    if (!group_id || Number(group_id)) {
-      throw new NotFoundException('Group not found');
-    }
-    const groups = await this.groupRepo.find({
-      where: {
-        id: group_id,
-      },
-      withDeleted: false,
-      relations: ['members', 'members.user'],
-    });
+  async getGroupNames(payload: GetGroupNameDto): Promise<ChatGroup[] | null> {
+    const groups = await this.groupRepo
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.members', 'member')
+      .leftJoinAndSelect('member.user', 'user')
+      .where('group.school_id = :school_id', { school_id: payload.school_id })
+      .andWhere((qb) => {
+        const subQuery = qb
+          .subQuery()
+          .select('m.group_id')
+          .from('chat_group_members', 'm')
+          .where('m.user_id = :user_id')
+          .getQuery();
+        return 'group.id IN ' + subQuery;
+      })
+      .setParameter('user_id', payload.user_id)
+      .andWhere('group.deleted_at IS NULL')
+      .getMany();
+
     return groups;
   }
 

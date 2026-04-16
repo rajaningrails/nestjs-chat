@@ -105,7 +105,6 @@ export class ConversationRepository implements IConversationRepository {
     messageId: number;
     updateAt: Date;
   }) {
-    const createdAt = toMySQLDate(data.updateAt);
     await this.conversationRepository
       .createQueryBuilder()
       .update(Conversation)
@@ -114,9 +113,6 @@ export class ConversationRepository implements IConversationRepository {
         updated_at: data.updateAt,
       })
       .where('id = :id', { id: data.conversationId })
-      .andWhere('(updated_at IS NULL OR updated_at <= :createdAt)', {
-        createdAt,
-      })
       .execute();
   }
 
@@ -389,7 +385,7 @@ export class ConversationRepository implements IConversationRepository {
           attachments: conv.last_message_attachments,
           is_muted: 0,
           muted_by_ids: null,
-          deleteMessageFlag: conv.last_message_delete_at ? 0 : 1,
+          deleteMessageFlag: conv.last_message_delete_at ? 1 : 0,
           user_id:
             conv.type === ConversationType.USER ? conv.other_user_id : null,
           user_details:
@@ -578,6 +574,8 @@ export class ConversationRepository implements IConversationRepository {
       data: merged.slice(0, limit),
       hasMore: offset + limit < adjustedTotal,
       totalRecords: adjustedTotal,
+      currentPage: offset / limit + 1,
+      totalPages: Math.ceil(adjustedTotal / limit),
       status: true,
       success: true,
     };

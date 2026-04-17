@@ -249,27 +249,34 @@ export class GroupRepository implements IGroupRepository {
     school_id: number,
     user_id: number,
     level: UserType,
-  ): Promise<ChatGroup[] | null> {
+  ): Promise<any[] | null> {
     if (!user_id || !school_id) {
       return null;
     }
+
+    let groups: ChatGroup[];
+
     if (level === UserType.CLIENT) {
-      return this.groupRepo.find({
+      groups = await this.groupRepo.find({
+        where: { school_id },
+        withDeleted: false,
+        relations: ['members', 'members.user', 'conversations'],
+      });
+    } else {
+      groups = await this.groupRepo.find({
         where: {
           school_id,
+          members: { user_id },
         },
         withDeleted: false,
         relations: ['members', 'members.user', 'conversations'],
       });
     }
-    const groups = await this.groupRepo.find({
-      where: {
-        school_id,
-        members: { user_id },
-      },
-      withDeleted: false,
-      relations: ['members', 'members.user', 'conversations'],
-    });
-    return groups;
+
+    return groups.map((group) => ({
+      ...group,
+      group_id: group.id,
+      id: group.id, 
+    }));
   }
 }

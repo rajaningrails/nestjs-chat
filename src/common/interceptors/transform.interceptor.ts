@@ -29,7 +29,6 @@ export class TransformInterceptor<T>
     return next.handle().pipe(
       map((data) => {
         const statusCode = response.statusCode;
-
         return {
           success: statusCode >= 200 && statusCode < 300,
           status: statusCode >= 200 && statusCode < 300,

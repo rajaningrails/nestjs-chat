@@ -52,10 +52,10 @@ export class GroupController {
     return this.groupRepository.findByIdWithGroupMembers(request?.group_id);
   }
 
-  // @Get('getGroupDetails')
-  // async findByConversationId(@Param('conversation_id') conversation_id: ): Promise<ChatGroup | null> {
-  //   return this.groupRepository.findByIdWithGroupMembers(id);
-  // }
+  @Get('getGroupDetails')
+  async findByConversationId(@Param('conversation_id') id: number): Promise<ChatGroup | null> {
+    return this.groupRepository.findByIdWithGroupMembers(id);
+  }
 
   @Get('manageGroup')
   async getGroupMembersDetail(@Param('group_id') id: GetGroupDto['group_id']): Promise<ChatGroup | null> {

@@ -88,7 +88,7 @@ export class TypingService implements OnApplicationBootstrap {
       typing_state_conversation_id: number;
       typing_state_sender_id: number;
       typing_state_receiver_id: number;
-      group_id?: number;
+      typing_state_group_id?: number;
     },
     userId: number,
   ): Promise<void> {
@@ -105,8 +105,8 @@ export class TypingService implements OnApplicationBootstrap {
 
       let memberIds: number[] = [];
 
-      if (isGroupChat && data.group_id) {
-        memberIds = await this.socketService.getGroupMemberIds(data.group_id);
+      if (isGroupChat && data.typing_state_group_id) {
+        memberIds = await this.socketService.getGroupMemberIds(data.typing_state_group_id);
       } else {
         memberIds = [
           data.typing_state_sender_id,
@@ -129,7 +129,7 @@ export class TypingService implements OnApplicationBootstrap {
         is_typing: true,
         timestamp: new Date(),
       };
-
+      console.log([memberIds, userId, typingData]);
       if (isGroupChat) {
         await this.socketService.emitToUsers(
           memberIds,
@@ -155,7 +155,7 @@ export class TypingService implements OnApplicationBootstrap {
       typing_state_conversation_id: number;
       typing_state_sender_id: number;
       typing_state_receiver_id: number;
-      group_id?: number;
+      typing_state_group_id?: number;
     },
     userId: number,
   ): Promise<void> {
@@ -174,9 +174,9 @@ export class TypingService implements OnApplicationBootstrap {
         timestamp: new Date(),
       };
 
-      if (isGroupChat && data.group_id) {
+      if (isGroupChat && data.typing_state_group_id) {
         const memberIds = await this.socketService.getGroupMemberIds(
-          data.group_id,
+          data.typing_state_group_id,
         );
         await this.socketService.emitToUsers(
           memberIds,

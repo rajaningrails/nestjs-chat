@@ -506,7 +506,7 @@ export class ConversationRepository implements IConversationRepository {
     offset: number,
   ) {
     const [bufferedRaw, dbMessages, totalRecords] = await Promise.all([
-      this.redis.lrange('buffer:message:create', 0, -1),
+      this.redis.lrange(`buffer:message:create:${conversationId}`, 0, -1),
       this.messageRepository.getConversationMessages(
         conversationId,
         limit,
@@ -515,7 +515,7 @@ export class ConversationRepository implements IConversationRepository {
       this.messageRepository.countConversationMessage(conversationId),
     ]);
 
-    const buffered: any[] = bufferedRaw
+    const buffered = bufferedRaw
       .map((r) => {
         try {
           return JSON.parse(r);
@@ -523,58 +523,53 @@ export class ConversationRepository implements IConversationRepository {
           return null;
         }
       })
-      .filter((m) => m && m.conversation_id == conversationId);
+      .filter((m) => m !== null);
 
-    const bufferedIds = new Set(buffered.map((m) => m.id?.toString()));
-    const uniqueDbMessages = dbMessages.filter(
-      (m) => !bufferedIds.has(m.id?.toString()),
-    );
+    const dbIds = new Set(dbMessages.map((m) => m.id?.toString()));
+    const newBuffered = buffered.filter((m) => !dbIds.has(m.id?.toString()));
 
-    const [presignedDbMessages, presignedBuffered] = await Promise.all([
-      Promise.all(
-        uniqueDbMessages.map(async (msg) => {
-          if (msg.attachments?.length) {
-            return {
-              ...msg,
-              attachments: await this.s3Service.generatePresignedUrls(
-                msg.attachments,
-              ),
-            };
-          }
-          return msg;
-        }),
-      ),
-      Promise.all(
-        buffered.map(async (msg) => {
-          if (msg.attachments?.length) {
-            return {
-              ...msg,
-              attachments: await this.s3Service.generatePresignedUrls(
-                msg.attachments,
-              ),
-            };
-          }
-          return msg;
-        }),
-      ),
+    const presign = async (msg) => {
+      const result = { ...msg };
+      if (result.attachments?.length) {
+        result.attachments = await this.s3Service.generatePresignedUrls(
+          result.attachments,
+        );
+      }
+      if (result.sender?.image) {
+        result.sender = {
+          ...result.sender,
+          image: await this.s3Service.generatePresignedUrl(result.sender.image),
+        };
+      }
+      if (result.group?.group_image) {
+        result.group = {
+          ...result.group,
+          group_image: await this.s3Service.generatePresignedUrl(
+            result.group.group_image,
+          ),
+        };
+      }
+      return result;
+    };
+
+    const [presignedDb, presignedBuffered] = await Promise.all([
+      Promise.all(dbMessages.map(presign)),
+      Promise.all(newBuffered.map(presign)),
     ]);
 
-    const merged = [...presignedBuffered, ...presignedDbMessages].sort(
+    const merged = [...presignedBuffered, ...presignedDb].sort(
       (a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
 
-    const bufferedNewCount = buffered.filter(
-      (b) => !dbMessages.find((m) => m.id?.toString() === b.id?.toString()),
-    ).length;
-    const adjustedTotal = totalRecords + bufferedNewCount;
+    const adjustedTotal = totalRecords + newBuffered.length;
 
     return {
       message: 'Messages retrieved successfully',
-      data: merged.slice(0, limit),
+      data: merged,
       hasMore: offset + limit < adjustedTotal,
       totalRecords: adjustedTotal,
-      currentPage: offset / limit + 1,
+      currentPage: Math.floor(offset / limit) + 1,
       totalPages: Math.ceil(adjustedTotal / limit),
       status: true,
       success: true,

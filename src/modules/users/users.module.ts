@@ -10,12 +10,14 @@ import { UpdateUserUseCase } from './use-cases/update-user.use-case';
 import { ScheduleModule } from '@nestjs/schedule';
 import { UsersService } from './services/users.service';
 import { messageQueueConfig } from 'src/infrastructure/bullmq';
+import { S3Module } from 'src/infrastructure/aws/aws.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User]),
     ScheduleModule.forRoot(),
     messageQueueConfig,
+    S3Module
   ],
   controllers: [UserController],
   providers: [

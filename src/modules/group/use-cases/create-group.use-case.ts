@@ -5,8 +5,8 @@ import { GroupRepository } from '../repositories/group.repository';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
 import { CreateChatGroupDto } from '../dto/chat-group.dto';
 import { GroupService } from '../service/group.service';
-import { User } from 'src/modules/users/entities/user.entity';
 import { CreateUserDto } from 'src/modules/users/dto/create-user.dto';
+import { S3PresignedUrlService } from 'src/common/services/aws.service';
 
 @Injectable()
 export class CreateGroupUseCase {
@@ -14,6 +14,7 @@ export class CreateGroupUseCase {
     @Inject(IGroupRepositoryToken)
     private readonly groupRepository: GroupRepository,
     private readonly groupService: GroupService,
+    private readonly s3Service: S3PresignedUrlService,
   ) {}
 
   async execute(request: CreateChatGroupDto) {
@@ -23,49 +24,63 @@ export class CreateGroupUseCase {
     if (exists) {
       throw new ConflictException('Group name already exists');
     }
+
     request.studentDetails = request.studentDetails?.map((m) => ({
       ...m,
       type: UserType.STUDENT,
     }));
+
     request.staffDetails = request.staffDetails?.map((m) => ({
       ...m,
       type: UserType.STAFF,
     }));
+
     const allMembers = [
       ...(request.studentDetails || []),
       ...(request.staffDetails || []),
     ];
-    const users:CreateUserDto[] = allMembers?.map((p) => ({
+
+    const [groupImage, ...memberImages] = await Promise.all([
+      request.group_image
+        ? this.s3Service.generatePresignedUrl(request.group_image)
+        : Promise.resolve(null),
+      ...allMembers.map((m) =>
+        m.image
+          ? this.s3Service.generatePresignedUrl(m.image)
+          : Promise.resolve(null),
+      ),
+    ]);
+
+    const users: CreateUserDto[] = allMembers.map((p, index) => ({
       user_id: p.id,
       school_id: request.school_id,
       type: p.type,
-      image: p?.image,
-      name: p?.name
+      image: memberImages[index]!,
+      name: p.name,
     }));
 
     let group_type: GroupType = GroupType.STUDENTS_GROUP;
     if (
-      request.studentDetails &&
-      request.studentDetails?.length > 0 &&
+      request.studentDetails!?.length > 0 &&
       (!request.staffDetails || request.staffDetails.length === 0)
     ) {
       group_type = GroupType.STUDENTS_GROUP;
     } else if (
-      request.staffDetails &&
-      request.staffDetails?.length > 0 &&
+      request.staffDetails!?.length > 0 &&
       (!request.studentDetails || request.studentDetails.length === 0)
     ) {
       group_type = GroupType.TEACHERS_GROUP;
     }
+
     const groupResponse = await this.groupService.createGroup({
       users,
       group: {
         created_by: request.created_by,
-        group_image: request.group_image,
+        group_image: groupImage!,
         group_name: request.group_name,
         school_id: request.school_id,
       },
-      group_type
+      group_type,
     });
 
     return groupResponse;

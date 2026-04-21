@@ -12,6 +12,7 @@ import { ConversationService } from 'src/modules/conversations/services/conversa
 import { SendMessageDto } from '../dto/send-message.dto';
 import { MessageGateway } from '../gateway/message.gateway';
 import { GroupRepository } from 'src/modules/group/repositories/group.repository';
+import { S3PresignedUrlService } from 'src/common/services/aws.service';
 
 @Injectable()
 export class SendMessageUseCase {
@@ -21,15 +22,14 @@ export class SendMessageUseCase {
     private readonly messageService: MessageService,
     private readonly messageGateway: MessageGateway,
     private readonly groupRepository: GroupRepository,
+    private readonly s3Service: S3PresignedUrlService,
   ) {}
 
   async execute(request: Partial<SendMessageDto>) {
     this.validateRequest(request);
 
     const conversation = await this.getConversation(request.conversation_id!);
-
     const isGroup = !!conversation.group_id;
-
     const messageData = this.buildMessageData(request, conversation, isGroup);
 
     await this.messageService.createMessage(messageData);
@@ -39,9 +39,40 @@ export class SendMessageUseCase {
       conversation,
     );
 
-    this.emitMessageEvent(messageData, sender, receiver, group, conversation);
+    const [senderImage, receiverImage, groupImage, attachments] =
+      await Promise.all([
+        sender?.image
+          ? this.s3Service.generatePresignedUrl(sender.image)
+          : Promise.resolve(null),
+        receiver?.image
+          ? this.s3Service.generatePresignedUrl(receiver.image)
+          : Promise.resolve(null),
+        group?.group_image
+          ? this.s3Service.generatePresignedUrl(group.group_image)
+          : Promise.resolve(null),
+        messageData?.attachments?.length
+          ? this.s3Service.generatePresignedUrls(messageData.attachments)
+          : Promise.resolve([]),
+      ]);
 
-    return this.buildResponse(messageData, sender, request);
+    const presignedSender = sender ? { ...sender, image: senderImage } : sender;
+    const presignedReceiver = receiver
+      ? { ...receiver, image: receiverImage }
+      : receiver;
+    const presignedGroup = group
+      ? { ...group, group_image: groupImage }
+      : group;
+    const presignedMessageData = { ...messageData, attachments };
+
+    this.emitMessageEvent(
+      presignedMessageData,
+      presignedSender,
+      presignedReceiver,
+      presignedGroup,
+      conversation,
+    );
+
+    return this.buildResponse(presignedMessageData, presignedSender, request);
   }
 
   private validateRequest(request: Partial<SendMessageDto>) {

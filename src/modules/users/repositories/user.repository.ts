@@ -5,12 +5,14 @@ import { IUserRepository } from './user.repository.interface';
 import { User } from '../entities/user.entity';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
+import { S3PresignedUrlService } from 'src/common/services/aws.service';
 
 @Injectable()
 export class UserRepository implements IUserRepository {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly s3Service: S3PresignedUrlService
   ) {}
 
   async findAll(): Promise<User[]> {
@@ -18,7 +20,11 @@ export class UserRepository implements IUserRepository {
   }
 
   async findByUserId(user_id: number): Promise<User | null> {
-    return this.userRepository.findOne({ where: { user_id } });
+    const response = await this.userRepository.findOne({ where: { user_id } });
+    const userImage = await this.s3Service.generatePresignedUrl(
+      response?.image!,
+    );
+    return { ...response, image: userImage } as User;
   }
 
   async create(userData: CreateUserDto): Promise<User> {

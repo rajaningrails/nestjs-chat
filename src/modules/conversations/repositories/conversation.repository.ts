@@ -208,7 +208,9 @@ export class ConversationRepository implements IConversationRepository {
           message: 'No conversation found',
         };
       }
-
+      const groupImage = await this.s3Service.generatePresignedUrl(
+        conversations?.group?.group_image!,
+      );
       const data = {
         id: conversations.id,
         school_id: conversations.school_id,
@@ -217,7 +219,7 @@ export class ConversationRepository implements IConversationRepository {
         type: conversations.type,
         group_id: conversations.group_id,
         group_name: conversations.group?.group_name,
-        group_image: conversations.group?.group_image,
+        group_image: groupImage,
         created_at: conversations.created_at,
         updated_at: conversations.updated_at,
         last_message: conversations.lastMessage?.message,
@@ -257,51 +259,51 @@ export class ConversationRepository implements IConversationRepository {
       const offset = (page - 1) * limit;
 
       let baseQuery = `
-        SELECT DISTINCT
-          c.*,
-          g.group_name as group_name,
-          g.group_image as group_image,
-          CASE 
-            WHEN c.last_message_sender_id = ? THEN c.last_message_receiver_id
-            ELSE c.last_message_sender_id
-          END as other_user_id,
-          u.name as other_user_name,
-          u.image as other_user_profile_image,
-          u.type as other_user_type,
-          CASE 
-            WHEN c.type = ? THEN 
-              CASE WHEN seen.id IS NOT NULL THEN true ELSE false END
-            ELSE NULL
-          END as is_seen,
-          m.message as last_message,
-          m.attachments as last_message_attachments,
-          m.created_at as last_message_created_at,
-          m.deleted_at as last_message_delete_at,
-          CASE 
-            WHEN c.type = ? THEN seen.created_at
-            ELSE m.seen_at
-          END as last_message_seen_at
-        FROM conversations c
-        LEFT JOIN chat_groups g ON c.group_id = g.id
-        LEFT JOIN chat_group_members gm ON g.id = gm.group_id
-        LEFT JOIN users u ON (
-          c.type = ? AND (
-            (c.last_message_sender_id = u.user_id AND u.user_id != ?) OR
-            (c.last_message_receiver_id = u.user_id AND u.user_id != ?)
-          )
+      SELECT DISTINCT
+        c.*,
+        g.group_name as group_name,
+        g.group_image as group_image,
+        CASE 
+          WHEN c.last_message_sender_id = ? THEN c.last_message_receiver_id
+          ELSE c.last_message_sender_id
+        END as other_user_id,
+        u.name as other_user_name,
+        u.image as other_user_profile_image,
+        u.type as other_user_type,
+        CASE 
+          WHEN c.type = ? THEN 
+            CASE WHEN seen.id IS NOT NULL THEN true ELSE false END
+          ELSE NULL
+        END as is_seen,
+        m.message as last_message,
+        m.attachments as last_message_attachments,
+        m.created_at as last_message_created_at,
+        m.deleted_at as last_message_delete_at,
+        CASE 
+          WHEN c.type = ? THEN seen.created_at
+          ELSE m.seen_at
+        END as last_message_seen_at
+      FROM conversations c
+      LEFT JOIN chat_groups g ON c.group_id = g.id
+      LEFT JOIN chat_group_members gm ON g.id = gm.group_id
+      LEFT JOIN users u ON (
+        c.type = ? AND (
+          (c.last_message_sender_id = u.user_id AND u.user_id != ?) OR
+          (c.last_message_receiver_id = u.user_id AND u.user_id != ?)
         )
-        LEFT JOIN messages m ON c.last_message_id = m.id
-        LEFT JOIN group_message_seen seen ON (
-          seen.message_id = c.last_message_id AND seen.user_id = ?
+      )
+      LEFT JOIN messages m ON c.last_message_id = m.id
+      LEFT JOIN group_message_seen seen ON (
+        seen.message_id = c.last_message_id AND seen.user_id = ?
+      )
+      WHERE c.school_id = ?
+        AND c.deleted_at IS NULL
+        AND (
+          c.last_message_sender_id = ? OR
+          c.last_message_receiver_id = ? OR
+          gm.user_id = ?
         )
-        WHERE c.school_id = ?
-          AND c.deleted_at IS NULL
-          AND (
-            c.last_message_sender_id = ? OR
-            c.last_message_receiver_id = ? OR
-            gm.user_id = ?
-          )
-      `;
+    `;
 
       const params: any[] = [
         user_id,
@@ -319,12 +321,12 @@ export class ConversationRepository implements IConversationRepository {
 
       if (search && search.trim() !== '') {
         baseQuery += `
-          AND (
-            (c.type = ? AND (u.name LIKE ?))
-            OR
-            (c.type = ? AND g.group_name LIKE ?)
-          )
-        `;
+        AND (
+          (c.type = ? AND (u.name LIKE ?))
+          OR
+          (c.type = ? AND g.group_name LIKE ?)
+        )
+      `;
         params.push(
           ConversationType.USER,
           `%${search}%`,
@@ -345,10 +347,10 @@ export class ConversationRepository implements IConversationRepository {
       const totalRecords = parseInt(countResult[0]?.total || '0');
 
       const dataQuery = `
-        ${baseQuery}
-        ORDER BY c.updated_at DESC
-        LIMIT ? OFFSET ?
-      `;
+      ${baseQuery}
+      ORDER BY c.updated_at DESC
+      LIMIT ? OFFSET ?
+    `;
 
       const conversations = await this.conversationRepository.query(dataQuery, [
         ...params,
@@ -358,54 +360,67 @@ export class ConversationRepository implements IConversationRepository {
 
       const totalPages = Math.ceil(totalRecords / limit);
       const hasMore = page < totalPages;
+
       const processedConversations = await Promise.all(
-        conversations.map(async (conv: any) => ({
-          id: conv.id,
-          type: conv.type,
-          school_id: conv.school_id,
-          sender_id: conv.last_message_sender_id,
-          receiver_id: conv.last_message_receiver_id,
-          group_id: conv.group_id,
-          group_type: conv.group_type,
-          created_at: conv.created_at,
-          updated_at: conv.updated_at,
-          last_message_id: conv.last_message_id,
-          last_message: conv.last_message,
-          last_message_sender_id: conv.last_message_sender_id,
-          last_message_receiver_type: conv.other_user_type,
-          last_message_seen_at: conv.last_message_seen_at,
-          last_message_date: conv.last_message_created_at,
-          is_only_teachers_group: conv.group_type,
-          is_online: conv.group_id
-            ? false
-            : await this.socketService.isUserOnline(conv?.other_user_id),
-          group_name: conv.group_name,
-          group_image: conv.group_image,
-          group_creator_id: conv.created_by,
-          attachments: conv.last_message_attachments,
-          is_muted: 0,
-          muted_by_ids: null,
-          deleteMessageFlag: conv.last_message_delete_at ? 1 : 0,
-          user_id:
-            conv.type === ConversationType.USER ? conv.other_user_id : null,
-          user_details:
-            conv.type === ConversationType.USER && conv.other_user_id
-              ? {
-                  id: conv.other_user_id,
-                  name: conv.other_user_name,
-                  image: conv.other_user_profile_image,
-                  class: null,
-                  section: null,
-                }
-              : null,
-        })),
+        conversations.map(async (conv: any) => {
+          const [userImage, groupImage, isOnline] = await Promise.all([
+            conv.other_user_profile_image
+              ? this.s3Service.generatePresignedUrl(
+                  conv.other_user_profile_image,
+                )
+              : Promise.resolve(null),
+            conv.group_image
+              ? this.s3Service.generatePresignedUrl(conv.group_image)
+              : Promise.resolve(null),
+            conv.group_id
+              ? Promise.resolve(false)
+              : this.socketService.isUserOnline(conv?.other_user_id),
+          ]);
+
+          return {
+            id: conv.id,
+            type: conv.type,
+            school_id: conv.school_id,
+            sender_id: conv.last_message_sender_id,
+            receiver_id: conv.last_message_receiver_id,
+            group_id: conv.group_id,
+            group_type: conv.group_type,
+            created_at: conv.created_at,
+            updated_at: conv.updated_at,
+            last_message_id: conv.last_message_id,
+            last_message: conv.last_message,
+            last_message_sender_id: conv.last_message_sender_id,
+            last_message_receiver_type: conv.other_user_type,
+            last_message_seen_at: conv.last_message_seen_at,
+            last_message_date: conv.last_message_created_at,
+            is_only_teachers_group: conv.group_type,
+            is_online: isOnline,
+            group_name: conv.group_name,
+            group_image: groupImage,
+            group_creator_id: conv.created_by,
+            attachments: conv.last_message_attachments,
+            is_muted: 0,
+            muted_by_ids: null,
+            deleteMessageFlag: conv.last_message_delete_at ? 1 : 0,
+            user_id:
+              conv.type === ConversationType.USER ? conv.other_user_id : null,
+            user_details:
+              conv.type === ConversationType.USER && conv.other_user_id
+                ? {
+                    id: conv.other_user_id,
+                    name: conv.other_user_name,
+                    image: userImage,
+                    class: null,
+                    section: null,
+                  }
+                : null,
+          };
+        }),
       );
 
       const idListRows = processedConversations
-        .filter(
-          (conv) => conv.type === ConversationType.USER && conv.other_user_id,
-        )
-        .map((conv) => conv.other_user_id);
+        .filter((conv) => conv.type === ConversationType.USER && conv.user_id)
+        .map((conv) => conv.user_id);
 
       const chatIdListRows = processedConversations.map((conv) => conv.id);
 
@@ -431,7 +446,6 @@ export class ConversationRepository implements IConversationRepository {
       };
     }
   }
-
   async getConversationMessages(conversation_id: number, limit = 25, page = 1) {
     try {
       const conversation_exists = await this.conversationRepository.findOne({

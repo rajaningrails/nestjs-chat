@@ -15,6 +15,7 @@ import {
 import { UserType } from 'src/modules/users/dto/user-type.enum';
 import { CreateChatGroupMemberDto } from '../dto/chat-group-member.dto';
 import { GroupMessageSeen } from '../entities/chat-group-message-seen.entity';
+import { S3PresignedUrlService } from 'src/common/services/aws.service';
 
 @Injectable()
 export class GroupRepository implements IGroupRepository {
@@ -27,6 +28,7 @@ export class GroupRepository implements IGroupRepository {
 
     @InjectRepository(GroupMessageSeen)
     private readonly groupMessageSeenRepo: Repository<GroupMessageSeen>,
+    private readonly s3Service: S3PresignedUrlService,
   ) {}
   async upsertBatch(groups: Partial<ChatGroup>[]): Promise<void> {
     if (!groups.length) return;
@@ -96,6 +98,30 @@ export class GroupRepository implements IGroupRepository {
 
     const savedGroup = await this.groupRepo.save(group);
     return savedGroup;
+  }
+
+  private async presignGroup(group: ChatGroup): Promise<ChatGroup> {
+    const allImageKeys = [
+      group.group_image ?? null,
+      ...(group.members?.map((m) => m.user?.image ?? null) || []),
+    ];
+
+    const [groupImage, ...memberImages] = await Promise.all(
+      allImageKeys.map((key) =>
+        key ? this.s3Service.generatePresignedUrl(key) : Promise.resolve(null),
+      ),
+    );
+
+    return {
+      ...group,
+      group_image: groupImage!,
+      members: group.members?.map((member, index) => ({
+        ...member,
+        user: member.user
+          ? { ...member.user, image: memberImages[index]! }
+          : member.user,
+      })),
+    };
   }
 
   async groupMessageSeenBatch(
@@ -202,7 +228,8 @@ export class GroupRepository implements IGroupRepository {
       withDeleted: false,
       relations: ['members', 'members.user'],
     });
-    return group;
+    if (!group) return null;
+    return await this.presignGroup(group);
   }
 
   async getGroupMembers(groupId: number): Promise<ChatGroupMember[]> {
@@ -230,8 +257,8 @@ export class GroupRepository implements IGroupRepository {
       .setParameter('user_id', payload.user_id)
       .andWhere('group.deleted_at IS NULL')
       .getMany();
-
-    return groups;
+    if (!groups?.length) return groups;
+    return Promise.all(groups.map((group) => this.presignGroup(group)));
   }
 
   async softDelete(conversationId: number): Promise<boolean> {
@@ -272,11 +299,14 @@ export class GroupRepository implements IGroupRepository {
         relations: ['members', 'members.user', 'conversations'],
       });
     }
+    const presigned = await Promise.all(
+      groups.map((group) => this.presignGroup(group)),
+    );
 
-    return groups.map((group) => ({
+    return presigned?.map((group) => ({
       ...group,
       group_id: group.id,
-      id: group.id, 
+      id: group.id,
     }));
   }
 }

@@ -1,14 +1,10 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
-import type { IUserRepository } from '../repositories/user.repository.interface';
-import { IUserRepositoryToken } from '../repositories/user.repository.interface';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { User } from '../entities/user.entity';
 import { UsersService } from '../services/users.service';
 
 @Injectable()
 export class GetUserUseCase {
   constructor(
-    @Inject(IUserRepositoryToken)
-    private readonly userRepository: IUserRepository,
     private readonly userService: UsersService
   ) {}
 

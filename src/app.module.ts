@@ -19,6 +19,7 @@ import { TasksModule } from './infrastructure/job/task.module';
 import { GroupModule } from './modules/group/group.module';
 import { DLQModule } from './modules/dlq/dlq.module';
 import { S3Module } from './infrastructure/aws/aws.module';
+import { DebugController } from './modules/debug/debug.controller';
 
 @Module({
   imports: [
@@ -51,7 +52,7 @@ import { S3Module } from './infrastructure/aws/aws.module';
     MessageModule,
     GroupModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, DebugController],
   providers: [
     AppService,
     // {

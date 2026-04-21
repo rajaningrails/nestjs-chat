@@ -16,7 +16,6 @@ export class ChatThrottlerGuard extends ThrottlerGuard {
       return `school_${schoolId}_user_${userId}`;
     }
 
-    // Handles both direct IP and common proxy headers
     const ip =
       req.ip ||
       req.connection?.remoteAddress ||

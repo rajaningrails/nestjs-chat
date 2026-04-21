@@ -34,6 +34,41 @@ export class SocketService {
     return this.redisService.getClient();
   }
 
+  getServer() {
+    return this.server;
+  }
+
+  async getAllSocketMappings(): Promise<Record<number, string[]>> {
+    const result: Record<number, string[]> = {};
+
+    try {
+      const pattern = `${this.USER_SOCKET_PREFIX}*`;
+      let cursor = '0';
+
+      do {
+        const [newCursor, keys] = await this.redis.scan(
+          cursor,
+          'MATCH',
+          pattern,
+          'COUNT',
+          100,
+        );
+        cursor = newCursor;
+
+        for (const key of keys) {
+          const userId = parseInt(key.replace(this.USER_SOCKET_PREFIX, ''), 10);
+          if (!isNaN(userId)) {
+            result[userId] = await this.getUserSockets(userId);
+          }
+        }
+      } while (cursor !== '0');
+    } catch (error) {
+      this.logger.error('Failed to get all socket mappings:', error);
+    }
+
+    return result;
+  }
+
   /**
    * Store user's socket with atomic operations
    */

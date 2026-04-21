@@ -2,11 +2,15 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
-import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import {
+  FastifyAdapter,
+  NestFastifyApplication,
+} from '@nestjs/platform-fastify';
 import { ConfigService } from '@nestjs/config';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { ValidationPipe } from '@nestjs/common';
-
+import { join } from 'path';
+import fastifyStatic from '@fastify/static';
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
@@ -43,11 +47,14 @@ async function bootstrap() {
   // app.setGlobalPrefix('api');
 
   app.enableShutdownHooks();
-
+  await app.register(fastifyStatic, {
+    root: join(__dirname, '..', 'src', 'public'),
+    prefix: '/static/',
+    decorateReply: true,
+  });
   await app.listen(port, '0.0.0.0');
 
   const gracefulShutdown = async (signal: string) => {
-    
     try {
       await app.close();
       process.exit(0);
@@ -58,7 +65,7 @@ async function bootstrap() {
 
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  
+
   process.on('message', (msg) => {
     if (msg === 'shutdown') {
       gracefulShutdown('PM2 shutdown message');

@@ -18,6 +18,8 @@ import { User } from 'src/modules/users/entities/user.entity';
 import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
 import { S3PresignedUrlService } from 'src/common/services/aws.service';
 import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
+import { SeenMessageDto } from '../dto/seen-message.dto';
+import { MessageSeenUseCase } from '../use-cases/message-seen.use-case';
 
 interface AuthenticatedSocket extends Socket {
   userId?: number;
@@ -47,6 +49,7 @@ export class MessageGateway
     private readonly typingService: TypingService,
     private readonly presenceService: PresenceService,
     private readonly s3Service: S3PresignedUrlService,
+    private readonly seenMessageUseCase: MessageSeenUseCase,
   ) {}
 
   async afterInit(server: Server) {
@@ -182,6 +185,18 @@ export class MessageGateway
       this.logger.error('Failed to handle typing indicator:', error);
     }
   }
+  
+  @SubscribeMessage('messageSeen')
+  async handleMessageSeen(@ConnectedSocket() client: AuthenticatedSocket, @MessageBody() data: SeenMessageDto) {
+    const userId = client.userId;
+    if (!userId) return;
+ 
+    try {
+      await this.seenMessageUseCase.execute(data);
+    } catch (error) {
+      this.logger.error('Failed to handle message seen:', error);
+    }
+  }
 
   async emitGroupCreated(
     conversationId: number,
@@ -206,7 +221,6 @@ export class MessageGateway
     updatedBy: number,
   ) {
     try {
-      // Emit to all group members including the updater
       await this.socketService.emitToGroupMembers(groupId, 'group-updated', {
         conversation_id: conversationId,
         updates,
@@ -310,7 +324,6 @@ export class MessageGateway
         this.s3Service.generatePresignedUrl(sender_user_details.image!),
         this.s3Service.generatePresignedUrl(receiver_user_details?.image!),
       ]);
-      console.log('presignedUrls', presignedUrls);
       const messageData = {
         status: true,
         message: 'Message sent successfully',

@@ -20,6 +20,7 @@ import { GroupModule } from './modules/group/group.module';
 import { DLQModule } from './modules/dlq/dlq.module';
 import { S3Module } from './infrastructure/aws/aws.module';
 import { DebugController } from './modules/debug/debug.controller';
+import { ChatConfigModule } from './modules/chat_configs/chat-configs.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { DebugController } from './modules/debug/debug.controller';
     ConversationsModule,
     MessageModule,
     GroupModule,
+    ChatConfigModule
   ],
   controllers: [AppController, DebugController],
   providers: [

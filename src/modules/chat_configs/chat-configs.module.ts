@@ -6,6 +6,7 @@ import { ChatConfigUseCase } from './use-cases/chat-config.use-case';
 import { ChatConfigRepository } from './repositories/chat-config.repository';
 import { ChatConfig } from './entities/chat-configs.entity';
 import { IChatConfigRepositoryToken } from './repositories/chat-config.repository.interface';
+import { GetChatConfigUseCase } from './use-cases/get-chat-config.use-case';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { IChatConfigRepositoryToken } from './repositories/chat-config.repositor
   controllers: [ChatConfigController],
   providers: [
     ChatConfigUseCase,
+    GetChatConfigUseCase,
     {
       provide: IChatConfigRepositoryToken,
       useClass: ChatConfigRepository,
@@ -21,6 +23,7 @@ import { IChatConfigRepositoryToken } from './repositories/chat-config.repositor
   ],
   exports: [
     ChatConfigUseCase,
+    GetChatConfigUseCase,
     {
       provide: IChatConfigRepositoryToken,
       useClass: ChatConfigRepository,

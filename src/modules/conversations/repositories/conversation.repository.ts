@@ -17,6 +17,7 @@ import { S3PresignedUrlService } from 'src/common/services/aws.service';
 import { CreateChatConfigDto } from 'src/modules/chat_configs/dto/chat-configs.dto';
 import { ChatConfigRepository } from 'src/modules/chat_configs/repositories/chat-config.repository';
 import { IChatConfigRepositoryToken } from 'src/modules/chat_configs/repositories/chat-config.repository.interface';
+import { config } from 'node:process';
 
 @Injectable()
 export class ConversationRepository implements IConversationRepository {
@@ -198,11 +199,14 @@ export class ConversationRepository implements IConversationRepository {
         for (let i = 0; i < keys?.length; i++) {
           if (Number(chatConfigs[i]) != 1) {
             allAllowedCase = 0;
+            break;
+          } else {
+            allAllowedCase = 1;
           }
         }
       }
 
-      if (chatConfigs?.length > 0) {
+      if (chatConfigs?.length > 0 && allAllowedCase) {
         for (const config of chatConfigs) {
           switch (config.feature_key) {
             case 'teacher_to_teacher_chat':
@@ -223,12 +227,12 @@ export class ConversationRepository implements IConversationRepository {
               break;
             case 'student_group_chat':
               allowedClauses.push(
-                `(c.type = 'group' AND group.group_type = 'student_group')`,
+                `(c.type = 'group' AND c.group_type = 'student_group')`,
               );
               break;
             case 'teacher_group_chat':
               allowedClauses.push(
-                `(c.type = 'group' AND group.group_type = 'teacher_group')`,
+                `(c.type = 'group' AND c.group_type = 'teacher_group')`,
               );
               break;
           }
@@ -340,81 +344,65 @@ export class ConversationRepository implements IConversationRepository {
       const chatConfigs: CreateChatConfigDto[] =
         await this.chatConfigRepository.findBy(String(user_id));
 
-      const allowedClauses: string[] = [];
-      const configParams: any[] = [];
-      const keys = [
-        'teacher_to_teacher_chat',
-        'teacher_to_student_chat',
-        'student_group_chat',
-        'teacher_group_chat',
-      ];
-      let allAllowedCase = 0;
-      if (chatConfigs?.length > 0) {
-        for (let i = 0; i < keys?.length; i++) {
-          if (Number(chatConfigs[i]) != 1) {
-            allAllowedCase = 0;
-          }
-        }
-      }
+      let allowedTypeFilter = '';
 
       if (chatConfigs?.length > 0) {
-        for (const config of chatConfigs) {
-          switch (config.feature_key) {
+        const blockedClauses: string[] = [];
+
+        const defaultKeys = [
+          'teacher_to_teacher_chat',
+          'teacher_to_student_chat',
+          'student_group_chat',
+          'teacher_group_chat',
+        ];
+
+        const configMap = new Map(
+          chatConfigs.map((c) => [c.feature_key, c.value]),
+        );
+
+        for (const key of defaultKeys) {
+          if (!configMap.has(key)) {
+            configMap.set(key, 1);
+          }
+        }
+
+        for (const [key, value] of configMap) {
+          if (Number(value) === 1) continue; 
+
+          switch (key) {
             case 'teacher_to_teacher_chat':
-              allowedClauses.push(`(
-                c.type = 'user'
-                AND sender_user.type = 'staff'
-                AND receiver_user.type = 'staff'
-              )`);
+              blockedClauses.push(
+                `NOT (c.type = 'user' AND sender_user.type = 'staff' AND receiver_user.type = 'staff')`,
+              );
               break;
-
             case 'teacher_to_student_chat':
-              allowedClauses.push(`(
-                c.type = 'user'
-                AND (
-                  (sender_user.type = 'staff' AND receiver_user.type = 'student')
-                  OR (sender_user.type = 'student' AND receiver_user.type = 'staff')
-                )
-              )`);
+              blockedClauses.push(
+                `NOT (c.type = 'user' AND ((sender_user.type = 'staff' AND receiver_user.type = 'student') OR (sender_user.type = 'student' AND receiver_user.type = 'staff')))`,
+              );
               break;
-
             case 'student_group_chat':
-              allowedClauses.push(`(
-                c.type = 'group'
-                AND g.group_type = 'student_group'
-              )`);
+              blockedClauses.push(
+                `NOT (c.type = 'group' AND c.group_type = 'student_group')`,
+              );
               break;
-
             case 'teacher_group_chat':
-              allowedClauses.push(`(
-                c.type = 'group'
-                AND g.group_type = 'teacher_group'
-              )`);
+              blockedClauses.push(
+                `NOT (c.type = 'group' AND c.group_type = 'teacher_group')`,
+              );
               break;
           }
         }
+
+        if (blockedClauses.length > 0) {
+          allowedTypeFilter = blockedClauses.map((c) => `AND ${c}`).join('\n');
+        }
       }
-
-      if (allowedClauses.length === 0) {
-        return {
-          conversations: [],
-          hasMore: false,
-          currentPage: page,
-          totalPages: 0,
-          totalRecords: 0,
-          idListRows: [],
-          chatIdListRows: [],
-        };
-      }
-
-      const allowedTypeFilter = `AND (${allowedClauses.join(' OR ')})`;
-
+      console.log(chatConfigs,'test')
       let baseQuery = `
         SELECT DISTINCT
           c.*,
           g.group_name     AS group_name,
           g.group_image    AS group_image,
-          g.group_type     AS group_type,
           CASE 
             WHEN c.last_message_sender_id = ? THEN c.last_message_receiver_id
             ELSE c.last_message_sender_id
@@ -474,7 +462,6 @@ export class ConversationRepository implements IConversationRepository {
         user_id, // last_message_sender_id
         user_id, // last_message_receiver_id
         user_id, // gm.user_id
-        ...configParams, // (empty — clauses are hardcoded strings)
       ];
 
       if (search && search.trim() !== '') {

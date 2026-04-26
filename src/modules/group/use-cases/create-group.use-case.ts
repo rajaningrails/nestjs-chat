@@ -35,10 +35,28 @@ export class CreateGroupUseCase {
       type: UserType.STAFF,
     }));
 
+    let group_type: GroupType = GroupType.STUDENTS_GROUP;
+    if (
+      request.studentDetails!?.length > 0 &&
+      (!request.staffDetails || request.staffDetails.length === 0)
+    ) {
+      group_type = GroupType.STUDENTS_GROUP;
+    } else if (
+      request.staffDetails!?.length > 0 &&
+      (!request.studentDetails || request.studentDetails.length === 0)
+    ) {
+      group_type = GroupType.TEACHERS_GROUP;
+    }
+
     const allMembers = [
       ...(request.studentDetails || []),
       ...(request.staffDetails || []),
     ];
+
+    await this.groupService.assertGroupTypeAllowed(
+      request.created_by,
+      group_type,
+    );
 
     const [groupImage, ...memberImages] = await Promise.all([
       request.group_image
@@ -58,19 +76,6 @@ export class CreateGroupUseCase {
       image: memberImages[index]!,
       name: p.name,
     }));
-
-    let group_type: GroupType = GroupType.STUDENTS_GROUP;
-    if (
-      request.studentDetails!?.length > 0 &&
-      (!request.staffDetails || request.staffDetails.length === 0)
-    ) {
-      group_type = GroupType.STUDENTS_GROUP;
-    } else if (
-      request.staffDetails!?.length > 0 &&
-      (!request.studentDetails || request.studentDetails.length === 0)
-    ) {
-      group_type = GroupType.TEACHERS_GROUP;
-    }
 
     const groupResponse = await this.groupService.createGroup({
       users,

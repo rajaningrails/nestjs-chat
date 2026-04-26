@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, EntityManager, IsNull, Repository } from 'typeorm';
 import { IConversationRepository } from './conversation.repository.interface';
@@ -6,7 +6,7 @@ import { Conversation } from '../entities/conversation.entity';
 import { toMySQLDate } from 'src/utils/helpers';
 import { CreateConversationDto } from '../dto/create-conversation.dto';
 import { UpdateConversationDto } from '../dto/update-conversation.dto';
-import { ConversationType } from '../dto/conversations.enum';
+import { ConversationType, GroupType } from '../dto/conversations.enum';
 import { MessageRepository } from 'src/modules/messages/repositories/message.repository';
 import { SocketService } from 'src/common/services/socket/socket.service';
 import { RedisService } from 'src/common/services/redis.service';
@@ -14,6 +14,9 @@ import { DeleteConversationDto } from '../dto/conversation-delete.dto';
 import { GroupRepository } from 'src/modules/group/repositories/group.repository';
 import { UsersService } from 'src/modules/users/services/users.service';
 import { S3PresignedUrlService } from 'src/common/services/aws.service';
+import { CreateChatConfigDto } from 'src/modules/chat_configs/dto/chat-configs.dto';
+import { ChatConfigRepository } from 'src/modules/chat_configs/repositories/chat-config.repository';
+import { IChatConfigRepositoryToken } from 'src/modules/chat_configs/repositories/chat-config.repository.interface';
 
 @Injectable()
 export class ConversationRepository implements IConversationRepository {
@@ -26,6 +29,8 @@ export class ConversationRepository implements IConversationRepository {
     private readonly groupRepository: GroupRepository,
     private readonly userService: UsersService,
     private readonly s3Service: S3PresignedUrlService,
+    @Inject(IChatConfigRepositoryToken)
+    private readonly chatConfigRepository: ChatConfigRepository,
   ) {}
 
   private get redis() {
@@ -177,18 +182,87 @@ export class ConversationRepository implements IConversationRepository {
     message: string;
   }> {
     try {
+      const chatConfigs = await this.chatConfigRepository.findBy(
+        String(sender_id),
+      );
+
+      const allowedClauses: string[] = [];
+      const keys = [
+        'teacher_to_teacher_chat',
+        'teacher_to_student_chat',
+        'student_group_chat',
+        'teacher_group_chat',
+      ];
+      let allAllowedCase = 0;
+      if (chatConfigs?.length > 0) {
+        for (let i = 0; i < keys?.length; i++) {
+          if (Number(chatConfigs[i]) != 1) {
+            allAllowedCase = 0;
+          }
+        }
+      }
+
+      if (chatConfigs?.length > 0) {
+        for (const config of chatConfigs) {
+          switch (config.feature_key) {
+            case 'teacher_to_teacher_chat':
+              allowedClauses.push(`(
+              c.type = 'user'
+              AND sender_user.type = 'staff'
+              AND receiver_user.type = 'staff'
+            )`);
+              break;
+            case 'teacher_to_student_chat':
+              allowedClauses.push(`(
+              c.type = 'user'
+              AND (
+                (sender_user.type = 'staff' AND receiver_user.type = 'student')
+                OR (sender_user.type = 'student' AND receiver_user.type = 'staff')
+              )
+            )`);
+              break;
+            case 'student_group_chat':
+              allowedClauses.push(
+                `(c.type = 'group' AND group.group_type = 'student_group')`,
+              );
+              break;
+            case 'teacher_group_chat':
+              allowedClauses.push(
+                `(c.type = 'group' AND group.group_type = 'teacher_group')`,
+              );
+              break;
+          }
+        }
+      }
+      if (allowedClauses.length === 0) {
+        return {
+          conversation_exists: false,
+          data: [],
+          message: 'No allowed conversation types configured',
+        };
+      }
+
       const queryBuilder = this.conversationRepository
         .createQueryBuilder('c')
         .leftJoinAndSelect('c.group', 'group')
         .leftJoinAndSelect('c.lastMessage', 'lastMessage')
         .leftJoin('group.members', 'gm')
+        .leftJoin(
+          'users',
+          'sender_user',
+          'sender_user.user_id = c.last_message_sender_id',
+        )
+        .leftJoin(
+          'users',
+          'receiver_user',
+          'receiver_user.user_id = c.last_message_receiver_id',
+        )
         .where('c.school_id = :school_id', { school_id })
-        .andWhere('c.deleted_at IS NULL');
-
-      queryBuilder.andWhere(
-        '(c.last_message_sender_id = :sender_id OR c.last_message_receiver_id = :sender_id OR gm.user_id = :sender_id)',
-        { sender_id },
-      );
+        .andWhere('c.deleted_at IS NULL')
+        .andWhere(
+          '(c.last_message_sender_id = :sender_id OR c.last_message_receiver_id = :sender_id OR gm.user_id = :sender_id)',
+          { sender_id },
+        );
 
       if (receiver_id) {
         queryBuilder.andWhere(
@@ -196,6 +270,9 @@ export class ConversationRepository implements IConversationRepository {
           { receiver_id },
         );
       }
+
+      // 4. Apply the config-based allowed types filter
+      queryBuilder.andWhere(`(${allowedClauses.join(' OR ')})`);
 
       const conversations = await queryBuilder
         .orderBy('c.updated_at', 'DESC')
@@ -208,9 +285,11 @@ export class ConversationRepository implements IConversationRepository {
           message: 'No conversation found',
         };
       }
+
       const groupImage = await this.s3Service.generatePresignedUrl(
         conversations?.group?.group_image!,
       );
+
       const data = {
         id: conversations.id,
         school_id: conversations.school_id,
@@ -258,75 +337,154 @@ export class ConversationRepository implements IConversationRepository {
     try {
       const offset = (page - 1) * limit;
 
+      const chatConfigs: CreateChatConfigDto[] =
+        await this.chatConfigRepository.findBy(String(user_id));
+
+      const allowedClauses: string[] = [];
+      const configParams: any[] = [];
+      const keys = [
+        'teacher_to_teacher_chat',
+        'teacher_to_student_chat',
+        'student_group_chat',
+        'teacher_group_chat',
+      ];
+      let allAllowedCase = 0;
+      if (chatConfigs?.length > 0) {
+        for (let i = 0; i < keys?.length; i++) {
+          if (Number(chatConfigs[i]) != 1) {
+            allAllowedCase = 0;
+          }
+        }
+      }
+
+      if (chatConfigs?.length > 0) {
+        for (const config of chatConfigs) {
+          switch (config.feature_key) {
+            case 'teacher_to_teacher_chat':
+              allowedClauses.push(`(
+                c.type = 'user'
+                AND sender_user.type = 'staff'
+                AND receiver_user.type = 'staff'
+              )`);
+              break;
+
+            case 'teacher_to_student_chat':
+              allowedClauses.push(`(
+                c.type = 'user'
+                AND (
+                  (sender_user.type = 'staff' AND receiver_user.type = 'student')
+                  OR (sender_user.type = 'student' AND receiver_user.type = 'staff')
+                )
+              )`);
+              break;
+
+            case 'student_group_chat':
+              allowedClauses.push(`(
+                c.type = 'group'
+                AND g.group_type = 'student_group'
+              )`);
+              break;
+
+            case 'teacher_group_chat':
+              allowedClauses.push(`(
+                c.type = 'group'
+                AND g.group_type = 'teacher_group'
+              )`);
+              break;
+          }
+        }
+      }
+
+      if (allowedClauses.length === 0) {
+        return {
+          conversations: [],
+          hasMore: false,
+          currentPage: page,
+          totalPages: 0,
+          totalRecords: 0,
+          idListRows: [],
+          chatIdListRows: [],
+        };
+      }
+
+      const allowedTypeFilter = `AND (${allowedClauses.join(' OR ')})`;
+
       let baseQuery = `
-      SELECT DISTINCT
-        c.*,
-        g.group_name as group_name,
-        g.group_image as group_image,
-        CASE 
-          WHEN c.last_message_sender_id = ? THEN c.last_message_receiver_id
-          ELSE c.last_message_sender_id
-        END as other_user_id,
-        u.name as other_user_name,
-        u.image as other_user_profile_image,
-        u.type as other_user_type,
-        CASE 
-          WHEN c.type = ? THEN 
-            CASE WHEN seen.id IS NOT NULL THEN true ELSE false END
-          ELSE NULL
-        END as is_seen,
-        m.message as last_message,
-        m.attachments as last_message_attachments,
-        m.created_at as last_message_created_at,
-        m.deleted_at as last_message_delete_at,
-        CASE 
-          WHEN c.type = ? THEN seen.created_at
-          ELSE m.seen_at
-        END as last_message_seen_at
-      FROM conversations c
-      LEFT JOIN chat_groups g ON c.group_id = g.id
-      LEFT JOIN chat_group_members gm ON g.id = gm.group_id
-      LEFT JOIN users u ON (
-        c.type = ? AND (
-          (c.last_message_sender_id = u.user_id AND u.user_id != ?) OR
-          (c.last_message_receiver_id = u.user_id AND u.user_id != ?)
+        SELECT DISTINCT
+          c.*,
+          g.group_name     AS group_name,
+          g.group_image    AS group_image,
+          g.group_type     AS group_type,
+          CASE 
+            WHEN c.last_message_sender_id = ? THEN c.last_message_receiver_id
+            ELSE c.last_message_sender_id
+          END AS other_user_id,
+          u.name           AS other_user_name,
+          u.image          AS other_user_profile_image,
+          u.type           AS other_user_type,
+          CASE 
+            WHEN c.type = ? THEN 
+              CASE WHEN seen.id IS NOT NULL THEN true ELSE false END
+            ELSE NULL
+          END AS is_seen,
+          m.message            AS last_message,
+          m.attachments        AS last_message_attachments,
+          m.created_at         AS last_message_created_at,
+          m.deleted_at         AS last_message_delete_at,
+          CASE 
+            WHEN c.type = ? THEN seen.created_at
+            ELSE m.seen_at
+          END AS last_message_seen_at
+        FROM conversations c
+        LEFT JOIN chat_groups      g    ON c.group_id = g.id
+        LEFT JOIN chat_group_members gm ON g.id = gm.group_id
+        -- Join sender & receiver so we can filter by user.type
+        LEFT JOIN users sender_user   ON sender_user.user_id   = c.last_message_sender_id
+        LEFT JOIN users receiver_user ON receiver_user.user_id = c.last_message_receiver_id
+        -- Join the "other" user for display fields (DM only)
+        LEFT JOIN users u ON (
+          c.type = ? AND (
+            (c.last_message_sender_id   = u.user_id AND u.user_id != ?) OR
+            (c.last_message_receiver_id = u.user_id AND u.user_id != ?)
+          )
         )
-      )
-      LEFT JOIN messages m ON c.last_message_id = m.id
-      LEFT JOIN group_message_seen seen ON (
-        seen.message_id = c.last_message_id AND seen.user_id = ?
-      )
-      WHERE c.school_id = ?
-        AND c.deleted_at IS NULL
-        AND (
-          c.last_message_sender_id = ? OR
-          c.last_message_receiver_id = ? OR
-          gm.user_id = ?
+        LEFT JOIN messages m ON c.last_message_id = m.id
+        LEFT JOIN group_message_seen seen ON (
+          seen.message_id = c.last_message_id AND seen.user_id = ?
         )
-    `;
+        WHERE c.school_id = ?
+          AND c.deleted_at IS NULL
+          AND (
+            c.last_message_sender_id   = ? OR
+            c.last_message_receiver_id = ? OR
+            gm.user_id                 = ?
+          )
+        ${allowedTypeFilter}
+      `;
 
       const params: any[] = [
-        user_id,
-        ConversationType.GROUP,
-        ConversationType.GROUP,
-        ConversationType.USER,
-        user_id,
-        user_id,
-        user_id,
-        school_id,
-        user_id,
-        user_id,
-        user_id,
+        user_id, // CASE other_user_id
+        ConversationType.GROUP, // CASE is_seen type check
+        ConversationType.GROUP, // CASE last_message_seen_at type check
+        ConversationType.USER, // JOIN users u — only for DM
+        user_id, // u.user_id != ? (sender side)
+        user_id, // u.user_id != ? (receiver side)
+        user_id, // seen.user_id
+        school_id, // c.school_id
+        user_id, // last_message_sender_id
+        user_id, // last_message_receiver_id
+        user_id, // gm.user_id
+        ...configParams, // (empty — clauses are hardcoded strings)
       ];
 
       if (search && search.trim() !== '') {
         baseQuery += `
-        AND (
-          (c.type = ? AND (u.name LIKE ?))
-          OR
-          (c.type = ? AND g.group_name LIKE ?)
-        )
-      `;
+          AND (
+            (c.type = ? AND u.name      LIKE ?)
+            OR
+            (c.type = ? AND g.group_name LIKE ?)
+          )
+        `;
         params.push(
           ConversationType.USER,
           `%${search}%`,
@@ -335,23 +493,23 @@ export class ConversationRepository implements IConversationRepository {
         );
       }
 
+      // 4. Count
       const countQuery = `
-      SELECT COUNT(DISTINCT subquery.id) as total
-      FROM (${baseQuery}) as subquery
-    `;
-
+        SELECT COUNT(DISTINCT subquery.id) AS total
+        FROM (${baseQuery}) AS subquery
+      `;
       const countResult = await this.conversationRepository.query(
         countQuery,
         params,
       );
       const totalRecords = parseInt(countResult[0]?.total || '0');
 
+      // 5. Paginated data
       const dataQuery = `
-      ${baseQuery}
-      ORDER BY c.updated_at DESC
-      LIMIT ? OFFSET ?
-    `;
-
+        ${baseQuery}
+        ORDER BY c.updated_at DESC
+        LIMIT ? OFFSET ?
+      `;
       const conversations = await this.conversationRepository.query(dataQuery, [
         ...params,
         limit,
@@ -421,7 +579,6 @@ export class ConversationRepository implements IConversationRepository {
       const idListRows = processedConversations
         .filter((conv) => conv.type === ConversationType.USER && conv.user_id)
         .map((conv) => conv.user_id);
-
       const chatIdListRows = processedConversations.map((conv) => conv.id);
 
       return {
@@ -443,73 +600,6 @@ export class ConversationRepository implements IConversationRepository {
         totalRecords: 0,
         idListRows: [],
         chatIdListRows: [],
-      };
-    }
-  }
-  async getConversationMessages(conversation_id: number, limit = 25, page = 1) {
-    try {
-      const conversation_exists = await this.conversationRepository.findOne({
-        where: {
-          id: conversation_id,
-        },
-        withDeleted: false,
-      });
-
-      if (!conversation_exists) {
-        return {
-          message: 'Conversation not found',
-          data: [],
-          currentPage: page,
-          hasMore: false,
-          totalPages: 0,
-          totalItems: 0,
-          totalRecords: 0,
-        };
-      }
-
-      const offset = (page - 1) * limit;
-
-      const totalRecords =
-        await this.messageRepository.countConversationMessage(conversation_id);
-
-      const messages = await this.messageRepository.getConversationMessages(
-        conversation_id,
-        limit,
-        offset,
-      );
-
-      const totalPages = Math.ceil(totalRecords / limit);
-      const hasMore = page < totalPages;
-
-      const formattedMessages = messages.map((message) => {
-        if (conversation_exists.type === ConversationType.GROUP) {
-          return {
-            ...message,
-            user_details: null,
-          };
-        }
-        return message;
-      });
-      return {
-        message: 'Messages retrieved successfully',
-        data: formattedMessages,
-        currentPage: page,
-        hasMore,
-        totalPages,
-        totalItems: messages.length,
-        totalRecords,
-        status: true,
-        success: true,
-      };
-    } catch (error) {
-      return {
-        message: 'Error retrieving messages',
-        data: [],
-        currentPage: page,
-        hasMore: false,
-        totalPages: 0,
-        totalItems: 0,
-        totalRecords: 0,
       };
     }
   }

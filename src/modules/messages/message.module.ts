@@ -18,6 +18,7 @@ import { MessageSeenUseCase } from './use-cases/message-seen.use-case';
 import { GroupModule } from '../group/group.module';
 import { ConversationsModule } from '../conversations/conversations.module';
 import { S3Module } from 'src/infrastructure/aws/aws.module';
+import { ChatConfigModule } from '../chat_configs/chat-configs.module';
 
 @Module({
   imports: [
@@ -26,7 +27,8 @@ import { S3Module } from 'src/infrastructure/aws/aws.module';
     forwardRef(() => ConversationsModule),
     forwardRef(() => GroupModule),
     UsersModule,
-    S3Module
+    S3Module,
+    forwardRef(() => ChatConfigModule),
   ],
   controllers: [MessageController],
   providers: [

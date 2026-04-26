@@ -13,6 +13,7 @@ import { GroupService } from './service/group.service';
 import { GroupMessageSeen } from './entities/chat-group-message-seen.entity';
 import { ConversationsModule } from '../conversations/conversations.module';
 import { S3Module } from 'src/infrastructure/aws/aws.module';
+import { ChatConfigModule } from '../chat_configs/chat-configs.module';
 
 @Module({
   imports: [
@@ -20,7 +21,8 @@ import { S3Module } from 'src/infrastructure/aws/aws.module';
     forwardRef(() => ConversationsModule), // Add forwardRef
     forwardRef(() => MessageModule), // Already added
     UsersModule,
-    S3Module
+    S3Module,
+    forwardRef(() => ChatConfigModule),
   ],
   controllers: [GroupController],
   providers: [

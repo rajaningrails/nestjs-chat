@@ -64,8 +64,23 @@ export class UpdateGroupUseCase {
       ...(request.studentDetails || []),
       ...(request.staffDetails || []),
     ];
+    let group_type: GroupType = GroupType.STUDENTS_GROUP;
+    if (
+      request.studentDetails!?.length > 0 &&
+      (!request.staffDetails || request.staffDetails.length === 0)
+    ) {
+      group_type = GroupType.STUDENTS_GROUP;
+    } else if (
+      request.staffDetails!?.length > 0 &&
+      (!request.studentDetails || request.studentDetails.length === 0)
+    ) {
+      group_type = GroupType.TEACHERS_GROUP;
+    }
+    await this.groupService.assertGroupTypeAllowed(
+      request.created_by,
+      group_type,
+    );
 
-    // Presign group image + all member images in parallel
     const [groupImage, ...memberImages] = await Promise.all([
       request.group_image
         ? this.s3Service.generatePresignedUrl(request.group_image)
@@ -83,19 +98,6 @@ export class UpdateGroupUseCase {
     }));
 
     await this.ensureUsersExist(presignedMembers, request.school_id!);
-
-    let group_type: GroupType = GroupType.STUDENTS_GROUP;
-    if (
-      request.studentDetails!?.length > 0 &&
-      (!request.staffDetails || request.staffDetails.length === 0)
-    ) {
-      group_type = GroupType.STUDENTS_GROUP;
-    } else if (
-      request.staffDetails!?.length > 0 &&
-      (!request.studentDetails || request.studentDetails.length === 0)
-    ) {
-      group_type = GroupType.TEACHERS_GROUP;
-    }
 
     const response = await this.groupService.updateGroup({
       users: presignedMembers,

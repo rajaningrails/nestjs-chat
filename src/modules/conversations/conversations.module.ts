@@ -9,6 +9,7 @@ import { MessageModule } from '../messages/message.module';
 import { UsersModule } from '../users/users.module';
 import { GroupModule } from '../group/group.module';
 import { S3Module } from 'src/infrastructure/aws/aws.module';
+import { ChatConfigModule } from '../chat_configs/chat-configs.module';
 
 @Module({
   imports: [
@@ -16,7 +17,8 @@ import { S3Module } from 'src/infrastructure/aws/aws.module';
     forwardRef(() => MessageModule),
     UsersModule,
     GroupModule,
-    S3Module
+    S3Module,
+    forwardRef(() => ChatConfigModule),
   ],
   controllers: [ConversationController],
   providers: [

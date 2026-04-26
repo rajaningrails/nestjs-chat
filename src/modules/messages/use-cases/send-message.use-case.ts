@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Inject,
+  ForbiddenException,
 } from '@nestjs/common';
 import { MessageService } from '../services/message.service';
 import { MessageDto } from '../dto/message.dto';
@@ -13,6 +15,9 @@ import { SendMessageDto } from '../dto/send-message.dto';
 import { MessageGateway } from '../gateway/message.gateway';
 import { GroupRepository } from 'src/modules/group/repositories/group.repository';
 import { S3PresignedUrlService } from 'src/common/services/aws.service';
+import { ChatConfigRepository } from 'src/modules/chat_configs/repositories/chat-config.repository';
+import { IChatConfigRepositoryToken } from 'src/modules/chat_configs/repositories/chat-config.repository.interface';
+import { ConversationType } from 'src/modules/conversations/dto/conversations.enum';
 
 @Injectable()
 export class SendMessageUseCase {
@@ -23,12 +28,17 @@ export class SendMessageUseCase {
     private readonly messageGateway: MessageGateway,
     private readonly groupRepository: GroupRepository,
     private readonly s3Service: S3PresignedUrlService,
+    @Inject(IChatConfigRepositoryToken)
+    private readonly chatConfigRepository: ChatConfigRepository,
   ) {}
 
   async execute(request: Partial<SendMessageDto>) {
     this.validateRequest(request);
 
     const conversation = await this.getConversation(request.conversation_id!);
+
+    await this.assertSendPermission(request.message_sender_id!, conversation);
+
     const isGroup = !!conversation.group_id;
     const messageData = this.buildMessageData(request, conversation, isGroup);
 
@@ -73,6 +83,68 @@ export class SendMessageUseCase {
     );
 
     return this.buildResponse(presignedMessageData, presignedSender, request);
+  }
+
+  private async assertSendPermission(
+    senderId: number,
+    conversation: any,
+  ): Promise<void> {
+    const chatConfigs = await this.chatConfigRepository.findBy(
+      String(senderId),
+    );
+    const enabledKeys = new Set(
+      chatConfigs.filter((c) => c.value).map((c) => c.feature_key),
+    );
+
+    const allowed = await this.isConversationAllowed(conversation, enabledKeys);
+
+    if (!allowed) {
+      throw new ForbiddenException(
+        'You are not allowed to send messages in this conversation',
+      );
+    }
+  }
+
+  private async isConversationAllowed(
+    conversation: any,
+    enabledKeys: Set<string>,
+  ): Promise<boolean> {
+    if (conversation.type === ConversationType.USER) {
+      const [sender, receiver] = await Promise.all([
+        this.userService.findUserById(conversation.last_message_sender_id),
+        this.userService.findUserById(conversation.last_message_receiver_id),
+      ]);
+
+      const senderType = sender?.type;
+      const receiverType = receiver?.type;
+
+      if (senderType === 'staff' && receiverType === 'staff') {
+        return enabledKeys.has('teacher_to_teacher_chat');
+      }
+      if (
+        (senderType === 'staff' && receiverType === 'student') ||
+        (senderType === 'student' && receiverType === 'staff')
+      ) {
+        return enabledKeys.has('teacher_to_student_chat');
+      }
+
+      return false;
+    }
+
+    if (conversation.type === ConversationType.GROUP) {
+      const groupType = conversation.group?.group_type;
+
+      if (groupType === 'student_group') {
+        return enabledKeys.has('student_group_chat');
+      }
+      if (groupType === 'teacher_group') {
+        return enabledKeys.has('teacher_group_chat');
+      }
+
+      return false;
+    }
+
+    return false;
   }
 
   private validateRequest(request: Partial<SendMessageDto>) {

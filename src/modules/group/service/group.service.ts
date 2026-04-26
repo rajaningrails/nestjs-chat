@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import {
   CreateChatGroupDto,
   PartialCreateUserDto,
@@ -16,6 +16,8 @@ import { generateSafeNumericId } from 'src/utils/helpers';
 import { UserRepository } from 'src/modules/users/repositories/user.repository';
 import { SocketService } from 'src/common/services/socket/socket.service';
 import { S3PresignedUrlService } from 'src/common/services/aws.service';
+import { IChatConfigRepositoryToken } from 'src/modules/chat_configs/repositories/chat-config.repository.interface';
+import { ChatConfigRepository } from 'src/modules/chat_configs/repositories/chat-config.repository';
 @Injectable()
 export class GroupService {
   constructor(
@@ -24,7 +26,9 @@ export class GroupService {
     private readonly messageRepository: MessageRepository,
     private readonly userRepository: UserRepository,
     private readonly socketService: SocketService,
-    private readonly s3Service: S3PresignedUrlService
+    private readonly s3Service: S3PresignedUrlService,
+    @Inject(IChatConfigRepositoryToken)
+    private readonly chatConfigRepository: ChatConfigRepository,
   ) {}
 
   async createGroup(payload: {
@@ -62,8 +66,8 @@ export class GroupService {
       })),
     );
     const s3ServiceImage = await this.s3Service.generatePresignedUrl(
-      groupResponse?.group_image!
-    )
+      groupResponse?.group_image!,
+    );
     await this.socketService.emitToGroupMembers(
       groupResponse?.id,
       'group-created',
@@ -109,7 +113,28 @@ export class GroupService {
       group_id: number;
     }[],
   ) {
-    console.log('started-group-message-seen',payload);
+    console.log('started-group-message-seen', payload);
     return await this.groupRepository.groupMessageSeenBatch(payload);
+  }
+
+  async assertGroupTypeAllowed(
+    userId: number,
+    groupType: GroupType,
+  ): Promise<void> {
+    const chatConfigs = await this.chatConfigRepository.findBy(String(userId));
+    const enabledKeys = new Set(
+      chatConfigs.filter((c) => c.value).map((c) => c.feature_key),
+    );
+
+    const featureKey =
+      groupType === GroupType.TEACHERS_GROUP
+        ? 'teacher_group_chat'
+        : 'student_group_chat';
+
+    if (!enabledKeys.has(featureKey)) {
+      throw new ForbiddenException(
+        `You are not allowed to manage ${groupType === GroupType.TEACHERS_GROUP ? 'staff' : 'student'} groups`,
+      );
+    }
   }
 }

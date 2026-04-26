@@ -10,7 +10,7 @@ import { GetChatConfigUseCase } from './use-cases/get-chat-config.use-case';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ChatConfig]) // assuming fixed
+    TypeOrmModule.forFeature([ChatConfig]), // assuming fixed
   ],
   controllers: [ChatConfigController],
   providers: [

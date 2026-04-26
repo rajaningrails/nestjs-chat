@@ -4,7 +4,6 @@ import {
   Query,
   ParseIntPipe,
   Post,
-  NotFoundException,
   Body,
 } from '@nestjs/common';
 import { ConversationRepository } from './repositories/conversation.repository';
@@ -33,13 +32,6 @@ export class ConversationController {
       search,
     );
   }
-
-  // @Get('conversation')
-  // async findOne(
-  //   @Query('id') conversation_id: number,
-  // ) {
-  //   return this.conversationRepository.getConversationMessages(conversation_id);
-  // }
 
   @Get('conversation-info')
   async find(@Query('conversation_id') conversation_id: number) {

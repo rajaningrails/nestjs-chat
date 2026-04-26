@@ -84,7 +84,6 @@ export class SendMessageUseCase {
 
     return this.buildResponse(presignedMessageData, presignedSender, request);
   }
-
   private async assertSendPermission(
     senderId: number,
     conversation: any,
@@ -92,22 +91,41 @@ export class SendMessageUseCase {
     const chatConfigs = await this.chatConfigRepository.findBy(
       String(senderId),
     );
-    const enabledKeys = new Set(
-      chatConfigs.filter((c) => c.value).map((c) => c.feature_key),
-    );
 
-    const allowed = await this.isConversationAllowed(conversation, enabledKeys);
+    const configMap = this.buildConfigMap(chatConfigs);
 
+    const allowed = await this.isConversationAllowed(conversation, configMap);
     if (!allowed) {
       throw new ForbiddenException(
         'You are not allowed to send messages in this conversation',
       );
     }
   }
+  
+  private buildConfigMap(chatConfigs: any[]): Map<string, number> {
+    const defaultKeys = [
+      'teacher_to_teacher_chat',
+      'teacher_to_student_chat',
+      'student_group_chat',
+      'teacher_group_chat',
+    ];
+
+    const configMap = new Map(
+      chatConfigs.map((c) => [c.feature_key, Number(c.value)]),
+    );
+
+    for (const key of defaultKeys) {
+      if (!configMap.has(key)) {
+        configMap.set(key, 1);
+      }
+    }
+
+    return configMap;
+  }
 
   private async isConversationAllowed(
     conversation: any,
-    enabledKeys: Set<string>,
+    configMap: Map<string, number>,
   ): Promise<boolean> {
     if (conversation.type === ConversationType.USER) {
       const [sender, receiver] = await Promise.all([
@@ -119,28 +137,25 @@ export class SendMessageUseCase {
       const receiverType = receiver?.type;
 
       if (senderType === 'staff' && receiverType === 'staff') {
-        return enabledKeys.has('teacher_to_teacher_chat');
+        return configMap.get('teacher_to_teacher_chat') === 1;
       }
       if (
         (senderType === 'staff' && receiverType === 'student') ||
         (senderType === 'student' && receiverType === 'staff')
       ) {
-        return enabledKeys.has('teacher_to_student_chat');
+        return configMap.get('teacher_to_student_chat') === 1;
       }
-
       return false;
     }
 
     if (conversation.type === ConversationType.GROUP) {
       const groupType = conversation.group?.group_type;
-
       if (groupType === 'student_group') {
-        return enabledKeys.has('student_group_chat');
+        return configMap.get('student_group_chat') === 1;
       }
       if (groupType === 'teacher_group') {
-        return enabledKeys.has('teacher_group_chat');
+        return configMap.get('teacher_group_chat') === 1;
       }
-
       return false;
     }
 

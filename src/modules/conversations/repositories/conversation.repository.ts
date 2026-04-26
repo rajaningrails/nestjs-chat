@@ -17,7 +17,6 @@ import { S3PresignedUrlService } from 'src/common/services/aws.service';
 import { CreateChatConfigDto } from 'src/modules/chat_configs/dto/chat-configs.dto';
 import { ChatConfigRepository } from 'src/modules/chat_configs/repositories/chat-config.repository';
 import { IChatConfigRepositoryToken } from 'src/modules/chat_configs/repositories/chat-config.repository.interface';
-import { config } from 'node:process';
 
 @Injectable()
 export class ConversationRepository implements IConversationRepository {
@@ -187,63 +186,49 @@ export class ConversationRepository implements IConversationRepository {
         String(sender_id),
       );
 
-      const allowedClauses: string[] = [];
-      const keys = [
+      const defaultKeys = [
         'teacher_to_teacher_chat',
         'teacher_to_student_chat',
         'student_group_chat',
         'teacher_group_chat',
       ];
-      let allAllowedCase = 0;
-      if (chatConfigs?.length > 0) {
-        for (let i = 0; i < keys?.length; i++) {
-          if (Number(chatConfigs[i]) != 1) {
-            allAllowedCase = 0;
-            break;
-          } else {
-            allAllowedCase = 1;
-          }
+
+      const configMap = new Map(
+        chatConfigs.map((c) => [c.feature_key, c.value]),
+      );
+
+      for (const key of defaultKeys) {
+        if (!configMap.has(key)) {
+          configMap.set(key, 1);
         }
       }
 
-      if (chatConfigs?.length > 0 && allAllowedCase) {
-        for (const config of chatConfigs) {
-          switch (config.feature_key) {
-            case 'teacher_to_teacher_chat':
-              allowedClauses.push(`(
-              c.type = 'user'
-              AND sender_user.type = 'staff'
-              AND receiver_user.type = 'staff'
-            )`);
-              break;
-            case 'teacher_to_student_chat':
-              allowedClauses.push(`(
-              c.type = 'user'
-              AND (
-                (sender_user.type = 'staff' AND receiver_user.type = 'student')
-                OR (sender_user.type = 'student' AND receiver_user.type = 'staff')
-              )
-            )`);
-              break;
-            case 'student_group_chat':
-              allowedClauses.push(
-                `(c.type = 'group' AND c.group_type = 'student_group')`,
-              );
-              break;
-            case 'teacher_group_chat':
-              allowedClauses.push(
-                `(c.type = 'group' AND c.group_type = 'teacher_group')`,
-              );
-              break;
-          }
+      const blockedClauses: string[] = [];
+      for (const [key, value] of configMap) {
+        if (Number(value) === 1) continue; 
+
+        switch (key) {
+          case 'teacher_to_teacher_chat':
+            blockedClauses.push(
+              `NOT (c.type = 'user' AND sender_user.type = 'staff' AND receiver_user.type = 'staff')`,
+            );
+            break;
+          case 'teacher_to_student_chat':
+            blockedClauses.push(
+              `NOT (c.type = 'user' AND ((sender_user.type = 'staff' AND receiver_user.type = 'student') OR (sender_user.type = 'student' AND receiver_user.type = 'staff')))`,
+            );
+            break;
+          case 'student_group_chat':
+            blockedClauses.push(
+              `NOT (c.type = 'group' AND c.group_type = 'student_group')`,
+            );
+            break;
+          case 'teacher_group_chat':
+            blockedClauses.push(
+              `NOT (c.type = 'group' AND c.group_type = 'teacher_group')`,
+            );
+            break;
         }
-      }
-      if (allowedClauses.length === 0) {
-        return {
-          conversation_exists: false,
-          data: [],
-          message: 'No allowed conversation types configured',
-        };
       }
 
       const queryBuilder = this.conversationRepository
@@ -275,8 +260,9 @@ export class ConversationRepository implements IConversationRepository {
         );
       }
 
-      // 4. Apply the config-based allowed types filter
-      queryBuilder.andWhere(`(${allowedClauses.join(' OR ')})`);
+      for (const clause of blockedClauses) {
+        queryBuilder.andWhere(clause);
+      }
 
       const conversations = await queryBuilder
         .orderBy('c.updated_at', 'DESC')
@@ -367,7 +353,7 @@ export class ConversationRepository implements IConversationRepository {
         }
 
         for (const [key, value] of configMap) {
-          if (Number(value) === 1) continue; 
+          if (Number(value) === 1) continue;
 
           switch (key) {
             case 'teacher_to_teacher_chat':
@@ -397,7 +383,7 @@ export class ConversationRepository implements IConversationRepository {
           allowedTypeFilter = blockedClauses.map((c) => `AND ${c}`).join('\n');
         }
       }
-      console.log(chatConfigs,'test')
+      console.log(chatConfigs, 'test');
       let baseQuery = `
         SELECT DISTINCT
           c.*,

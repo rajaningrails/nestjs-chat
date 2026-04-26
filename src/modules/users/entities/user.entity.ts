@@ -8,7 +8,7 @@ import {
   OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { UserType } from '../dto/user-type.enum';
+import { IsAdmin, UserType } from '../dto/user-type.enum';
 import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
 
 @Entity('users')
@@ -32,6 +32,9 @@ export class User {
 
   @Column({type: 'enum', enum: UserType})
   type: UserType;
+
+  @Column({type: 'enum', enum: IsAdmin, default: IsAdmin.NO})
+  is_admin: IsAdmin;
 
   @Column({type:'text', nullable: true})
   class: string;

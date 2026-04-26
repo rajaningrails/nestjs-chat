@@ -6,6 +6,7 @@ import { User } from '../entities/user.entity';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { S3PresignedUrlService } from 'src/common/services/aws.service';
+import { handleUserType, IsAdminHelper } from 'src/utils/helpers';
 
 @Injectable()
 export class UserRepository implements IUserRepository {
@@ -28,7 +29,7 @@ export class UserRepository implements IUserRepository {
   }
 
   async create(userData: CreateUserDto): Promise<User> {
-    const user = this.userRepository.create(userData);
+    const user = this.userRepository.create({...userData, type: handleUserType(userData.type), is_admin: IsAdminHelper(userData.type)});
     return this.userRepository.save(user);
   }
 

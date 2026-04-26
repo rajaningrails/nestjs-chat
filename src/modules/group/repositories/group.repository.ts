@@ -283,7 +283,7 @@ export class GroupRepository implements IGroupRepository {
 
     let groups: ChatGroup[];
 
-    if (level === UserType.CLIENT) {
+    if (level === 'client') {
       groups = await this.groupRepo.find({
         where: { school_id },
         withDeleted: false,

@@ -171,6 +171,35 @@ export class ConversationRepository implements IConversationRepository {
     }
   }
 
+  isConversationEnabled = (conv: any, chatConfigs: any): boolean => {
+    const enabledKeys = new Set(
+      (chatConfigs || []).map((c: any) => c.feature_key),
+    );
+
+    if (conv.type === ConversationType.USER) {
+      const senderType = conv.sender_user_type;
+      const receiverType = conv.receiver_user_type;
+      if (senderType === 'staff' && receiverType === 'staff') {
+        return enabledKeys.has('teacher_to_teacher_chat');
+      }
+      if (
+        (senderType === 'staff' && receiverType === 'student') ||
+        (senderType === 'student' && receiverType === 'staff')
+      ) {
+        return enabledKeys.has('teacher_to_student_chat');
+      }
+    }
+    if (conv.type === ConversationType.GROUP) {
+      if (conv.group_type === 'student_group') {
+        return enabledKeys.has('student_group_chat');
+      }
+      if (conv.group_type === 'teacher_group') {
+        return enabledKeys.has('teacher_group_chat');
+      }
+    }
+    return false;
+  };
+
   async findConversation(
     school_id: number,
     sender_id: number,
@@ -185,62 +214,6 @@ export class ConversationRepository implements IConversationRepository {
       const chatConfigs = await this.chatConfigRepository.findBy(
         String(sender_id),
       );
-
-      const allowedClauses: string[] = [];
-      const keys = [
-        'teacher_to_teacher_chat',
-        'teacher_to_student_chat',
-        'student_group_chat',
-        'teacher_group_chat',
-      ];
-      let allAllowedCase = 0;
-      if (chatConfigs?.length > 0) {
-        for (let i = 0; i < keys?.length; i++) {
-          if (Number(chatConfigs[i]) != 1) {
-            allAllowedCase = 0;
-          }
-        }
-      }
-
-      if (chatConfigs?.length > 0) {
-        for (const config of chatConfigs) {
-          switch (config.feature_key) {
-            case 'teacher_to_teacher_chat':
-              allowedClauses.push(`(
-              c.type = 'user'
-              AND sender_user.type = 'staff'
-              AND receiver_user.type = 'staff'
-            )`);
-              break;
-            case 'teacher_to_student_chat':
-              allowedClauses.push(`(
-              c.type = 'user'
-              AND (
-                (sender_user.type = 'staff' AND receiver_user.type = 'student')
-                OR (sender_user.type = 'student' AND receiver_user.type = 'staff')
-              )
-            )`);
-              break;
-            case 'student_group_chat':
-              allowedClauses.push(
-                `(c.type = 'group' AND group.group_type = 'student_group')`,
-              );
-              break;
-            case 'teacher_group_chat':
-              allowedClauses.push(
-                `(c.type = 'group' AND group.group_type = 'teacher_group')`,
-              );
-              break;
-          }
-        }
-      }
-      if (allowedClauses.length === 0) {
-        return {
-          conversation_exists: false,
-          data: [],
-          message: 'No allowed conversation types configured',
-        };
-      }
 
       const queryBuilder = this.conversationRepository
         .createQueryBuilder('c')
@@ -257,6 +230,8 @@ export class ConversationRepository implements IConversationRepository {
           'receiver_user',
           'receiver_user.user_id = c.last_message_receiver_id',
         )
+        .addSelect('sender_user.type', 'sender_user_type')
+        .addSelect('receiver_user.type', 'receiver_user_type')
         .where('c.school_id = :school_id', { school_id })
         .andWhere('c.deleted_at IS NULL')
         .andWhere(
@@ -271,12 +246,12 @@ export class ConversationRepository implements IConversationRepository {
         );
       }
 
-      // 4. Apply the config-based allowed types filter
-      queryBuilder.andWhere(`(${allowedClauses.join(' OR ')})`);
-
-      const conversations = await queryBuilder
+      const conversationRaw = await queryBuilder
         .orderBy('c.updated_at', 'DESC')
-        .getOne();
+        .getRawAndEntities();
+
+      const conversations = conversationRaw.entities[0];
+      const rawRow = conversationRaw.raw[0];
 
       if (!conversations) {
         return {
@@ -285,6 +260,19 @@ export class ConversationRepository implements IConversationRepository {
           message: 'No conversation found',
         };
       }
+
+      const convWithTypes = {
+        ...conversations,
+        type: conversations.type,
+        group_type: conversations.group?.group_type,
+        sender_user_type: rawRow?.sender_user_type,
+        receiver_user_type: rawRow?.receiver_user_type,
+      };
+
+      const isDisabled = !this.isConversationEnabled(
+        convWithTypes,
+        chatConfigs,
+      );
 
       const groupImage = await this.s3Service.generatePresignedUrl(
         conversations?.group?.group_image!,
@@ -303,6 +291,7 @@ export class ConversationRepository implements IConversationRepository {
         updated_at: conversations.updated_at,
         last_message: conversations.lastMessage?.message,
         last_message_sender_id: conversations.last_message_sender_id,
+        is_disabled: isDisabled,
       };
 
       return {
@@ -340,108 +329,43 @@ export class ConversationRepository implements IConversationRepository {
       const chatConfigs: CreateChatConfigDto[] =
         await this.chatConfigRepository.findBy(String(user_id));
 
-      const allowedClauses: string[] = [];
-      const configParams: any[] = [];
-      const keys = [
-        'teacher_to_teacher_chat',
-        'teacher_to_student_chat',
-        'student_group_chat',
-        'teacher_group_chat',
-      ];
-      let allAllowedCase = 0;
-      if (chatConfigs?.length > 0) {
-        for (let i = 0; i < keys?.length; i++) {
-          if (Number(chatConfigs[i]) != 1) {
-            allAllowedCase = 0;
-          }
-        }
-      }
-
-      if (chatConfigs?.length > 0) {
-        for (const config of chatConfigs) {
-          switch (config.feature_key) {
-            case 'teacher_to_teacher_chat':
-              allowedClauses.push(`(
-                c.type = 'user'
-                AND sender_user.type = 'staff'
-                AND receiver_user.type = 'staff'
-              )`);
-              break;
-
-            case 'teacher_to_student_chat':
-              allowedClauses.push(`(
-                c.type = 'user'
-                AND (
-                  (sender_user.type = 'staff' AND receiver_user.type = 'student')
-                  OR (sender_user.type = 'student' AND receiver_user.type = 'staff')
-                )
-              )`);
-              break;
-
-            case 'student_group_chat':
-              allowedClauses.push(`(
-                c.type = 'group'
-                AND g.group_type = 'student_group'
-              )`);
-              break;
-
-            case 'teacher_group_chat':
-              allowedClauses.push(`(
-                c.type = 'group'
-                AND g.group_type = 'teacher_group'
-              )`);
-              break;
-          }
-        }
-      }
-
-      if (allowedClauses.length === 0) {
-        return {
-          conversations: [],
-          hasMore: false,
-          currentPage: page,
-          totalPages: 0,
-          totalRecords: 0,
-          idListRows: [],
-          chatIdListRows: [],
-        };
-      }
-
-      const allowedTypeFilter = `AND (${allowedClauses.join(' OR ')})`;
+      const enabledKeys = new Set(
+        (chatConfigs || []).map((c: any) => c.feature_key),
+      );
 
       let baseQuery = `
         SELECT DISTINCT
           c.*,
-          g.group_name     AS group_name,
-          g.group_image    AS group_image,
-          g.group_type     AS group_type,
-          CASE 
+          g.group_name      AS group_name,
+          g.group_image     AS group_image,
+          g.group_type      AS group_type,
+          sender_user.type  AS sender_user_type,
+          receiver_user.type AS receiver_user_type,
+          CASE
             WHEN c.last_message_sender_id = ? THEN c.last_message_receiver_id
             ELSE c.last_message_sender_id
           END AS other_user_id,
-          u.name           AS other_user_name,
-          u.image          AS other_user_profile_image,
-          u.type           AS other_user_type,
-          CASE 
-            WHEN c.type = ? THEN 
+          u.name            AS other_user_name,
+          u.image           AS other_user_profile_image,
+          u.type            AS other_user_type,
+          CASE
+            WHEN c.type = ? THEN
               CASE WHEN seen.id IS NOT NULL THEN true ELSE false END
             ELSE NULL
           END AS is_seen,
-          m.message            AS last_message,
-          m.attachments        AS last_message_attachments,
-          m.created_at         AS last_message_created_at,
-          m.deleted_at         AS last_message_delete_at,
-          CASE 
+          m.message             AS last_message,
+          m.attachments         AS last_message_attachments,
+          m.created_at          AS last_message_created_at,
+          m.deleted_at          AS last_message_delete_at,
+          CASE
             WHEN c.type = ? THEN seen.created_at
             ELSE m.seen_at
           END AS last_message_seen_at
         FROM conversations c
-        LEFT JOIN chat_groups      g    ON c.group_id = g.id
-        LEFT JOIN chat_group_members gm ON g.id = gm.group_id
-        -- Join sender & receiver so we can filter by user.type
-        LEFT JOIN users sender_user   ON sender_user.user_id   = c.last_message_sender_id
-        LEFT JOIN users receiver_user ON receiver_user.user_id = c.last_message_receiver_id
-        -- Join the "other" user for display fields (DM only)
+        LEFT JOIN chat_groups         g    ON c.group_id = g.id
+        LEFT JOIN chat_group_members  gm   ON g.id = gm.group_id
+        LEFT JOIN users sender_user        ON sender_user.user_id   = c.last_message_sender_id
+        LEFT JOIN users receiver_user      ON receiver_user.user_id = c.last_message_receiver_id
         LEFT JOIN users u ON (
           c.type = ? AND (
             (c.last_message_sender_id   = u.user_id AND u.user_id != ?) OR
@@ -459,7 +383,6 @@ export class ConversationRepository implements IConversationRepository {
             c.last_message_receiver_id = ? OR
             gm.user_id                 = ?
           )
-        ${allowedTypeFilter}
       `;
 
       const params: any[] = [
@@ -474,13 +397,12 @@ export class ConversationRepository implements IConversationRepository {
         user_id, // last_message_sender_id
         user_id, // last_message_receiver_id
         user_id, // gm.user_id
-        ...configParams, // (empty — clauses are hardcoded strings)
       ];
 
       if (search && search.trim() !== '') {
         baseQuery += `
           AND (
-            (c.type = ? AND u.name      LIKE ?)
+            (c.type = ? AND u.name       LIKE ?)
             OR
             (c.type = ? AND g.group_name LIKE ?)
           )
@@ -493,7 +415,6 @@ export class ConversationRepository implements IConversationRepository {
         );
       }
 
-      // 4. Count
       const countQuery = `
         SELECT COUNT(DISTINCT subquery.id) AS total
         FROM (${baseQuery}) AS subquery
@@ -504,7 +425,6 @@ export class ConversationRepository implements IConversationRepository {
       );
       const totalRecords = parseInt(countResult[0]?.total || '0');
 
-      // 5. Paginated data
       const dataQuery = `
         ${baseQuery}
         ORDER BY c.updated_at DESC
@@ -521,6 +441,8 @@ export class ConversationRepository implements IConversationRepository {
 
       const processedConversations = await Promise.all(
         conversations.map(async (conv: any) => {
+          const isDisabled = !this.isConversationEnabled(conv, chatConfigs);
+
           const [userImage, groupImage, isOnline] = await Promise.all([
             conv.other_user_profile_image
               ? this.s3Service.generatePresignedUrl(
@@ -560,6 +482,7 @@ export class ConversationRepository implements IConversationRepository {
             is_muted: 0,
             muted_by_ids: null,
             deleteMessageFlag: conv.last_message_delete_at ? 1 : 0,
+            is_disabled: isDisabled,
             user_id:
               conv.type === ConversationType.USER ? conv.other_user_id : null,
             user_details:

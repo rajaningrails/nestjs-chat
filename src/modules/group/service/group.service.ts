@@ -122,19 +122,37 @@ export class GroupService {
     groupType: GroupType,
   ): Promise<void> {
     const chatConfigs = await this.chatConfigRepository.findBy(String(userId));
-    const enabledKeys = new Set(
-      chatConfigs.filter((c) => c.value).map((c) => c.feature_key),
-    );
+    const configMap = this.buildConfigMap(chatConfigs);
 
     const featureKey =
       groupType === GroupType.TEACHERS_GROUP
         ? 'teacher_group_chat'
         : 'student_group_chat';
 
-    if (!enabledKeys.has(featureKey)) {
+    if (configMap.get(featureKey) !== 1) {
       throw new ForbiddenException(
         `You are not allowed to manage ${groupType === GroupType.TEACHERS_GROUP ? 'staff' : 'student'} groups`,
       );
     }
+  }
+  private buildConfigMap(chatConfigs: any[]): Map<string, number> {
+    const defaultKeys = [
+      'teacher_to_teacher_chat',
+      'teacher_to_student_chat',
+      'student_group_chat',
+      'teacher_group_chat',
+    ];
+
+    const configMap = new Map(
+      chatConfigs.map((c) => [c.feature_key, Number(c.value)]),
+    );
+
+    for (const key of defaultKeys) {
+      if (!configMap.has(key)) {
+        configMap.set(key, 1);
+      }
+    }
+
+    return configMap;
   }
 }

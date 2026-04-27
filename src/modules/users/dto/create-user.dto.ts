@@ -6,7 +6,7 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
-import { UserType } from './user-type.enum';
+import { IsAdmin, UserType } from './user-type.enum';
 
 export class CreateUserDto {
   @IsInt()
@@ -34,4 +34,8 @@ export class CreateUserDto {
   @IsDateString()
   @IsOptional()
   updated_at?: string;
+
+  @IsEnum(IsAdmin)
+  @IsOptional()
+  is_admin?: IsAdmin;
 }

@@ -6,6 +6,7 @@ import { Queue } from 'bullmq';
 import { MessageProcessorConfig } from 'src/infrastructure/bullmq/size-queue.config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { SyncUserDto } from '../dto/sync-user.dto';
+import { handleUserType } from 'src/utils/helpers';
 
 @Injectable()
 export class UpdateUserUseCase {
@@ -28,11 +29,12 @@ export class UpdateUserUseCase {
         ...existingUser,
         name: request.name,
         image: request.image,
-        type: request.type,
+        type: handleUserType(request.type),
         school_id: request.app_id,
         user_id: request.app_user_id,
         class: request.class,
         section: request.section,
+        is_admin: handleUserType(request?.type)
       },
       {
         priority: 3,

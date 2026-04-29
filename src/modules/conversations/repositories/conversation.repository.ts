@@ -264,7 +264,7 @@ export class ConversationRepository implements IConversationRepository {
       const convWithTypes = {
         ...conversations,
         type: conversations.type,
-        group_type: conversations.group?.group_type,
+        group_type: conversations?.group_type,
         sender_user_type: rawRow?.sender_user_type,
         receiver_user_type: rawRow?.receiver_user_type,
       };

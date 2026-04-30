@@ -63,7 +63,6 @@ export class ChatConfigRepository implements IChatConfigRepository {
     });
 
     await this.redis.set(cacheKey, JSON.stringify(data), 'EX', 60 * 60 * 24 * 7);
-
     return data;
   }
 }

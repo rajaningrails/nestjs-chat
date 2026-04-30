@@ -1,5 +1,5 @@
-import { IS_ALPHA } from "class-validator";
-import { UserType, IsAdmin } from "src/modules/users/dto/user-type.enum";
+import { IS_ALPHA } from 'class-validator';
+import { UserType, IsAdmin } from 'src/modules/users/dto/user-type.enum';
 
 export function toMySQLDate(date: Date | string): Date {
   return date instanceof Date ? date : new Date(date);
@@ -38,14 +38,13 @@ export function escapeValue(value: any): string {
 }
 
 export function generateSafeNumericId(): number {
-  const ts = Math.floor(Date.now() / 1000); 
+  const ts = Math.floor(Date.now() / 1000);
   const random = Math.floor(Math.random() * 100000);
   return ts * 100000 + random;
 }
 
-
-export function handleUserType(type:string): UserType{
-  switch(type){
+export function handleUserType(type: string): UserType {
+  switch (type) {
     case 'parent':
       return UserType?.STUDENT;
     case 'parents':
@@ -53,15 +52,36 @@ export function handleUserType(type:string): UserType{
     case 'client':
       return UserType?.STAFF;
     default:
-      return type as UserType
+      return type as UserType;
   }
 }
 
-export function IsAdminHelper(type:string): IsAdmin{
-  switch(type){
+export function IsAdminHelper(type: string): IsAdmin {
+  switch (type) {
     case 'client':
       return IsAdmin?.YES;
     default:
-      return IsAdmin?.NO
+      return IsAdmin?.NO;
   }
+}
+
+export function buildConfigMap(chatConfigs: any[]): Map<string, number> {
+  const defaultKeys = [
+    'teacher_to_teacher_chat',
+    'teacher_to_student_chat',
+    'student_group_chat',
+    'teacher_group_chat',
+  ];
+
+  const configMap = new Map(
+    chatConfigs.map((c) => [c.feature_key, Number(c.value)]),
+  );
+
+  for (const key of defaultKeys) {
+    if (!configMap.has(key)) {
+      configMap.set(key, 1);
+    }
+  }
+
+  return configMap;
 }

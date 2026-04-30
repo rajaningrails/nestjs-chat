@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, EntityManager, IsNull, Repository } from 'typeorm';
 import { IConversationRepository } from './conversation.repository.interface';
 import { Conversation } from '../entities/conversation.entity';
-import { toMySQLDate } from 'src/utils/helpers';
+import { buildConfigMap, toMySQLDate } from 'src/utils/helpers';
 import { CreateConversationDto } from '../dto/create-conversation.dto';
 import { UpdateConversationDto } from '../dto/update-conversation.dto';
 import { ConversationType, GroupType } from '../dto/conversations.enum';
@@ -65,13 +65,111 @@ export class ConversationRepository implements IConversationRepository {
       )
       .execute();
   }
-  async findById(id: number): Promise<Conversation | null> {
-    return this.conversationRepository.findOne({
-      where: { id },
-      withDeleted: false,
-    });
-  }
 
+  async findById(id: number): Promise<any | null> {
+    const queryBuilder = this.conversationRepository
+      .createQueryBuilder('c')
+      .leftJoinAndSelect('c.group', 'group')
+      .leftJoinAndSelect('c.lastMessage', 'lastMessage')
+      .leftJoin(
+        'users',
+        'sender_user',
+        'sender_user.user_id = c.last_message_sender_id',
+      )
+      .leftJoin(
+        'users',
+        'receiver_user',
+        'receiver_user.user_id = c.last_message_receiver_id',
+      )
+      // Sender fields
+      .addSelect('sender_user.user_id', 'sender_user_id')
+      .addSelect('sender_user.name', 'sender_name')
+      .addSelect('sender_user.image', 'sender_image')
+      .addSelect('sender_user.type', 'sender_user_type')
+      .addSelect('sender_user.is_admin', 'sender_is_admin')
+      .addSelect('sender_user.class', 'sender_class')
+      .addSelect('sender_user.section', 'sender_section')
+      // Receiver fields
+      .addSelect('receiver_user.user_id', 'receiver_user_id')
+      .addSelect('receiver_user.name', 'receiver_name')
+      .addSelect('receiver_user.image', 'receiver_image')
+      .addSelect('receiver_user.type', 'receiver_user_type')
+      .addSelect('receiver_user.is_admin', 'receiver_is_admin')
+      .addSelect('receiver_user.class', 'receiver_class')
+      .addSelect('receiver_user.section', 'receiver_section')
+      .where('c.id = :id', { id })
+      .andWhere('c.deleted_at IS NULL');
+
+    const { entities, raw } = await queryBuilder.getRawAndEntities();
+
+    const conversation = entities[0];
+    const rawRow = raw[0];
+
+    if (!conversation) return null;
+
+    const convWithTypes = {
+      ...conversation,
+      type: conversation.type,
+      group_type: conversation?.group_type,
+      sender_user_type: rawRow?.sender_user_type,
+      receiver_user_type: rawRow?.receiver_user_type,
+    };
+
+    const chatConfigs = await this.chatConfigRepository.findBy(
+      String(conversation?.last_message_sender_id),
+    );
+
+    const isDisabled = !this.isConversationEnabled(
+      convWithTypes,
+      buildConfigMap(chatConfigs),
+    );
+
+    const [groupImage, senderImage, receiverImage] = await Promise.all([
+      conversation?.group?.group_image
+        ? this.s3Service.generatePresignedUrl(conversation.group.group_image)
+        : Promise.resolve(null),
+      rawRow?.sender_image
+        ? this.s3Service.generatePresignedUrl(rawRow.sender_image)
+        : Promise.resolve(null),
+      rawRow?.receiver_image
+        ? this.s3Service.generatePresignedUrl(rawRow.receiver_image)
+        : Promise.resolve(null),
+    ]);
+
+    return {
+      ...conversation,
+      is_disabled: isDisabled,
+      group: conversation.group
+        ? {
+            ...conversation.group,
+            group_image: groupImage,
+          }
+        : null,
+      sender_details: rawRow?.sender_user_id
+        ? {
+            user_id: rawRow.sender_user_id,
+            name: rawRow.sender_name,
+            image: senderImage,
+            type: rawRow.sender_user_type,
+            is_admin: rawRow.sender_is_admin,
+            class: rawRow.sender_class,
+            section: rawRow.sender_section,
+          }
+        : null,
+      receiver_details: rawRow?.receiver_user_id
+        ? {
+            user_id: rawRow.receiver_user_id,
+            name: rawRow.receiver_name,
+            image: receiverImage,
+            type: rawRow.receiver_user_type,
+            is_admin: rawRow.receiver_is_admin,
+            class: rawRow.receiver_class,
+            section: rawRow.receiver_section,
+          }
+        : null,
+    };
+  }
+  
   async save(conversationData: CreateConversationDto): Promise<Conversation> {
     const conversation = this.conversationRepository.create(conversationData);
     return this.conversationRepository.save(conversation);
@@ -172,29 +270,25 @@ export class ConversationRepository implements IConversationRepository {
   }
 
   isConversationEnabled = (conv: any, chatConfigs: any): boolean => {
-    const enabledKeys = new Set(
-      (chatConfigs || []).map((c: any) => c.feature_key),
-    );
-
     if (conv.type === ConversationType.USER) {
       const senderType = conv.sender_user_type;
       const receiverType = conv.receiver_user_type;
       if (senderType === 'staff' && receiverType === 'staff') {
-        return enabledKeys.has('teacher_to_teacher_chat');
+        return chatConfigs.has('teacher_to_teacher_chat');
       }
       if (
         (senderType === 'staff' && receiverType === 'student') ||
         (senderType === 'student' && receiverType === 'staff')
       ) {
-        return enabledKeys.has('teacher_to_student_chat');
+        return chatConfigs.has('teacher_to_student_chat');
       }
     }
     if (conv.type === ConversationType.GROUP) {
       if (conv.group_type === 'student_group') {
-        return enabledKeys.has('student_group_chat');
+        return chatConfigs.has('student_group_chat');
       }
       if (conv.group_type === 'teacher_group') {
-        return enabledKeys.has('teacher_group_chat');
+        return chatConfigs.has('teacher_group_chat');
       }
     }
     return false;
@@ -202,19 +296,13 @@ export class ConversationRepository implements IConversationRepository {
 
   async findConversation(
     school_id: number,
-    sender_id: number,
-    receiver_id: number | null,
-    type: ConversationType,
+    conversationId: number,
   ): Promise<{
     conversation_exists: boolean;
     data: any;
     message: string;
   }> {
     try {
-      const chatConfigs = await this.chatConfigRepository.findBy(
-        String(sender_id),
-      );
-
       const queryBuilder = this.conversationRepository
         .createQueryBuilder('c')
         .leftJoinAndSelect('c.group', 'group')
@@ -230,30 +318,34 @@ export class ConversationRepository implements IConversationRepository {
           'receiver_user',
           'receiver_user.user_id = c.last_message_receiver_id',
         )
+        // Sender user fields
+        .addSelect('sender_user.user_id', 'sender_user_id')
+        .addSelect('sender_user.name', 'sender_name')
+        .addSelect('sender_user.image', 'sender_image')
         .addSelect('sender_user.type', 'sender_user_type')
+        .addSelect('sender_user.is_admin', 'sender_is_admin')
+        .addSelect('sender_user.class', 'sender_class')
+        .addSelect('sender_user.section', 'sender_section')
+        // Receiver user fields
+        .addSelect('receiver_user.user_id', 'receiver_user_id')
+        .addSelect('receiver_user.name', 'receiver_name')
+        .addSelect('receiver_user.image', 'receiver_image')
         .addSelect('receiver_user.type', 'receiver_user_type')
+        .addSelect('receiver_user.is_admin', 'receiver_is_admin')
+        .addSelect('receiver_user.class', 'receiver_class')
+        .addSelect('receiver_user.section', 'receiver_section')
         .where('c.school_id = :school_id', { school_id })
         .andWhere('c.deleted_at IS NULL')
-        .andWhere(
-          '(c.last_message_sender_id = :sender_id OR c.last_message_receiver_id = :sender_id OR gm.user_id = :sender_id)',
-          { sender_id },
-        );
-
-      if (receiver_id) {
-        queryBuilder.andWhere(
-          '(c.last_message_sender_id = :receiver_id OR c.last_message_receiver_id = :receiver_id)',
-          { receiver_id },
-        );
-      }
+        .andWhere('c.id = :conversationId', { conversationId });
 
       const conversationRaw = await queryBuilder
         .orderBy('c.updated_at', 'DESC')
         .getRawAndEntities();
 
-      const conversations = conversationRaw.entities[0];
+      const conversation = conversationRaw.entities[0];
       const rawRow = conversationRaw.raw[0];
 
-      if (!conversations) {
+      if (!conversation) {
         return {
           conversation_exists: false,
           data: [],
@@ -262,36 +354,71 @@ export class ConversationRepository implements IConversationRepository {
       }
 
       const convWithTypes = {
-        ...conversations,
-        type: conversations.type,
-        group_type: conversations?.group_type,
+        ...conversation,
+        type: conversation.type,
+        group_type: conversation?.group_type,
         sender_user_type: rawRow?.sender_user_type,
         receiver_user_type: rawRow?.receiver_user_type,
       };
 
+      const chatConfigs = await this.chatConfigRepository.findBy(
+        String(conversation?.last_message_sender_id),
+      );
+
       const isDisabled = !this.isConversationEnabled(
         convWithTypes,
-        chatConfigs,
+        buildConfigMap(chatConfigs),
       );
 
-      const groupImage = await this.s3Service.generatePresignedUrl(
-        conversations?.group?.group_image!,
-      );
+      const [groupImage, senderImage, receiverImage] = await Promise.all([
+        conversation?.group?.group_image
+          ? this.s3Service.generatePresignedUrl(conversation.group.group_image)
+          : Promise.resolve(null),
+        rawRow?.sender_image
+          ? this.s3Service.generatePresignedUrl(rawRow.sender_image)
+          : Promise.resolve(null),
+        rawRow?.receiver_image
+          ? this.s3Service.generatePresignedUrl(rawRow.receiver_image)
+          : Promise.resolve(null),
+      ]);
 
       const data = {
-        id: conversations.id,
-        school_id: conversations.school_id,
-        sender_id,
-        user_id: receiver_id,
-        type: conversations.type,
-        group_id: conversations.group_id,
-        group_name: conversations.group?.group_name,
+        id: conversation.id,
+        school_id: conversation.school_id,
+        type: conversation.type,
+        group_id: conversation.group_id,
+        group_name: conversation.group?.group_name,
         group_image: groupImage,
-        created_at: conversations.created_at,
-        updated_at: conversations.updated_at,
-        last_message: conversations.lastMessage?.message,
-        last_message_sender_id: conversations.last_message_sender_id,
+        created_at: conversation.created_at,
+        updated_at: conversation.updated_at,
+        last_message: conversation.lastMessage?.message,
+        last_message_sender_id: conversation.last_message_sender_id,
+        last_message_receiver_id: conversation.last_message_receiver_id,
         is_disabled: isDisabled,
+
+        sender_details: rawRow?.sender_user_id
+          ? {
+              user_id: rawRow.sender_user_id,
+              name: rawRow.sender_name,
+              image: senderImage,
+              type: rawRow.sender_user_type,
+              is_admin: rawRow.sender_is_admin,
+              class: rawRow.sender_class,
+              section: rawRow.sender_section,
+            }
+          : null,
+
+        receiver_details: rawRow?.receiver_user_id
+          ? {
+              user_id: rawRow.receiver_user_id,
+              name: rawRow.receiver_name,
+              image: receiverImage,
+              type: rawRow.receiver_user_type,
+              is_admin: rawRow.receiver_is_admin,
+              class: rawRow.receiver_class,
+              section: rawRow.receiver_section,
+            }
+          : null,
       };
 
       return {
@@ -329,84 +456,75 @@ export class ConversationRepository implements IConversationRepository {
       const chatConfigs: CreateChatConfigDto[] =
         await this.chatConfigRepository.findBy(String(user_id));
 
-      const enabledKeys = new Set(
-        (chatConfigs || []).map((c: any) => c.feature_key),
-      );
-
       let baseQuery = `
-        SELECT DISTINCT
-          c.*,
-          g.group_name      AS group_name,
-          g.group_image     AS group_image,
-          g.group_type      AS group_type,
-          sender_user.type  AS sender_user_type,
-          receiver_user.type AS receiver_user_type,
-          CASE
-            WHEN c.last_message_sender_id = ? THEN c.last_message_receiver_id
-            ELSE c.last_message_sender_id
-          END AS other_user_id,
-          u.name            AS other_user_name,
-          u.image           AS other_user_profile_image,
-          u.type            AS other_user_type,
-          CASE
-            WHEN c.type = ? THEN
-              CASE WHEN seen.id IS NOT NULL THEN true ELSE false END
-            ELSE NULL
-          END AS is_seen,
-          m.message             AS last_message,
-          m.attachments         AS last_message_attachments,
-          m.created_at          AS last_message_created_at,
-          m.deleted_at          AS last_message_delete_at,
-          CASE
-            WHEN c.type = ? THEN seen.created_at
-            ELSE m.seen_at
-          END AS last_message_seen_at
-        FROM conversations c
-        LEFT JOIN chat_groups         g    ON c.group_id = g.id
-        LEFT JOIN chat_group_members  gm   ON g.id = gm.group_id
-        LEFT JOIN users sender_user        ON sender_user.user_id   = c.last_message_sender_id
-        LEFT JOIN users receiver_user      ON receiver_user.user_id = c.last_message_receiver_id
-        LEFT JOIN users u ON (
-          c.type = ? AND (
-            (c.last_message_sender_id   = u.user_id AND u.user_id != ?) OR
-            (c.last_message_receiver_id = u.user_id AND u.user_id != ?)
-          )
+      SELECT DISTINCT
+        c.*,
+        g.group_name as group_name,
+        g.group_image as group_image,
+        CASE 
+          WHEN c.last_message_sender_id = ? THEN c.last_message_receiver_id
+          ELSE c.last_message_sender_id
+        END as other_user_id,
+        u.name as other_user_name,
+        u.image as other_user_profile_image,
+        u.type as other_user_type,
+        CASE 
+          WHEN c.type = ? THEN 
+            CASE WHEN seen.id IS NOT NULL THEN true ELSE false END
+          ELSE NULL
+        END as is_seen,
+        m.message as last_message,
+        m.attachments as last_message_attachments,
+        m.created_at as last_message_created_at,
+        m.deleted_at as last_message_delete_at,
+        CASE 
+          WHEN c.type = ? THEN seen.created_at
+          ELSE m.seen_at
+        END as last_message_seen_at
+      FROM conversations c
+      LEFT JOIN chat_groups g ON c.group_id = g.id
+      LEFT JOIN chat_group_members gm ON g.id = gm.group_id
+      LEFT JOIN users u ON (
+        c.type = ? AND (
+          (c.last_message_sender_id = u.user_id AND u.user_id != ?) OR
+          (c.last_message_receiver_id = u.user_id AND u.user_id != ?)
         )
-        LEFT JOIN messages m ON c.last_message_id = m.id
-        LEFT JOIN group_message_seen seen ON (
-          seen.message_id = c.last_message_id AND seen.user_id = ?
+      )
+      LEFT JOIN messages m ON c.last_message_id = m.id
+      LEFT JOIN group_message_seen seen ON (
+        seen.message_id = c.last_message_id AND seen.user_id = ?
+      )
+      WHERE c.school_id = ?
+        AND c.deleted_at IS NULL
+        AND (
+          c.last_message_sender_id = ? OR
+          c.last_message_receiver_id = ? OR
+          gm.user_id = ?
         )
-        WHERE c.school_id = ?
-          AND c.deleted_at IS NULL
-          AND (
-            c.last_message_sender_id   = ? OR
-            c.last_message_receiver_id = ? OR
-            gm.user_id                 = ?
-          )
-      `;
+    `;
 
       const params: any[] = [
-        user_id, // CASE other_user_id
-        ConversationType.GROUP, // CASE is_seen type check
-        ConversationType.GROUP, // CASE last_message_seen_at type check
-        ConversationType.USER, // JOIN users u — only for DM
-        user_id, // u.user_id != ? (sender side)
-        user_id, // u.user_id != ? (receiver side)
-        user_id, // seen.user_id
-        school_id, // c.school_id
-        user_id, // last_message_sender_id
-        user_id, // last_message_receiver_id
-        user_id, // gm.user_id
+        user_id,
+        ConversationType.GROUP,
+        ConversationType.GROUP,
+        ConversationType.USER,
+        user_id,
+        user_id,
+        user_id,
+        school_id,
+        user_id,
+        user_id,
+        user_id,
       ];
 
       if (search && search.trim() !== '') {
         baseQuery += `
-          AND (
-            (c.type = ? AND u.name       LIKE ?)
-            OR
-            (c.type = ? AND g.group_name LIKE ?)
-          )
-        `;
+        AND (
+          (c.type = ? AND (u.name LIKE ?))
+          OR
+          (c.type = ? AND g.group_name LIKE ?)
+        )
+      `;
         params.push(
           ConversationType.USER,
           `%${search}%`,
@@ -416,9 +534,10 @@ export class ConversationRepository implements IConversationRepository {
       }
 
       const countQuery = `
-        SELECT COUNT(DISTINCT subquery.id) AS total
-        FROM (${baseQuery}) AS subquery
-      `;
+      SELECT COUNT(DISTINCT subquery.id) as total
+      FROM (${baseQuery}) as subquery
+    `;
+
       const countResult = await this.conversationRepository.query(
         countQuery,
         params,
@@ -426,10 +545,11 @@ export class ConversationRepository implements IConversationRepository {
       const totalRecords = parseInt(countResult[0]?.total || '0');
 
       const dataQuery = `
-        ${baseQuery}
-        ORDER BY c.updated_at DESC
-        LIMIT ? OFFSET ?
-      `;
+      ${baseQuery}
+      ORDER BY c.updated_at DESC
+      LIMIT ? OFFSET ?
+    `;
+
       const conversations = await this.conversationRepository.query(dataQuery, [
         ...params,
         limit,
@@ -441,7 +561,10 @@ export class ConversationRepository implements IConversationRepository {
 
       const processedConversations = await Promise.all(
         conversations.map(async (conv: any) => {
-          const isDisabled = !this.isConversationEnabled(conv, chatConfigs);
+          const isDisabled = !this.isConversationEnabled(
+            conv,
+            buildConfigMap(chatConfigs),
+          );
 
           const [userImage, groupImage, isOnline] = await Promise.all([
             conv.other_user_profile_image
@@ -481,8 +604,8 @@ export class ConversationRepository implements IConversationRepository {
             attachments: conv.last_message_attachments,
             is_muted: 0,
             muted_by_ids: null,
-            deleteMessageFlag: conv.last_message_delete_at ? 1 : 0,
             is_disabled: isDisabled,
+            deleteMessageFlag: conv.last_message_delete_at ? 1 : 0,
             user_id:
               conv.type === ConversationType.USER ? conv.other_user_id : null,
             user_details:
@@ -502,6 +625,7 @@ export class ConversationRepository implements IConversationRepository {
       const idListRows = processedConversations
         .filter((conv) => conv.type === ConversationType.USER && conv.user_id)
         .map((conv) => conv.user_id);
+
       const chatIdListRows = processedConversations.map((conv) => conv.id);
 
       return {
@@ -532,7 +656,7 @@ export class ConversationRepository implements IConversationRepository {
     limit: number,
     offset: number,
   ) {
-    const [bufferedRaw, dbMessages, totalRecords] = await Promise.all([
+    const [bufferedRaw, dbMessages, totalRecords, conversationInfo] = await Promise.all([
       this.redis.lrange(`buffer:message:create:${conversationId}`, 0, -1),
       this.messageRepository.getConversationMessages(
         conversationId,
@@ -540,6 +664,7 @@ export class ConversationRepository implements IConversationRepository {
         offset,
       ),
       this.messageRepository.countConversationMessage(conversationId),
+      this.conversationRepository.findOneBy({ id: conversationId }),
     ]);
 
     const buffered = bufferedRaw
@@ -576,6 +701,17 @@ export class ConversationRepository implements IConversationRepository {
           ),
         };
       }
+      if(result?.group_id){
+        result['user_details'] = {
+          ...result.sender
+        }
+      }else{
+        result['user_details'] = {
+          ...result.receiver
+        }
+      }
+      delete result.sender;
+      delete result.receiver;
       return result;
     };
 
@@ -590,7 +726,14 @@ export class ConversationRepository implements IConversationRepository {
     );
 
     const adjustedTotal = totalRecords + newBuffered.length;
+    const chatConfigs = await this.chatConfigRepository.findBy(
+      String(conversationInfo?.last_message_sender_id),
+    );
 
+    const isDisabled = !this.isConversationEnabled(
+      conversationInfo,
+      buildConfigMap(chatConfigs),
+    );
     return {
       message: 'Messages retrieved successfully',
       data: merged,
@@ -600,6 +743,8 @@ export class ConversationRepository implements IConversationRepository {
       totalPages: Math.ceil(adjustedTotal / limit),
       status: true,
       success: true,
+      conversationInfo,
+      is_disabled: isDisabled,
     };
   }
 

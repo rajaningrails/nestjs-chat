@@ -8,7 +8,7 @@ import {
 import { MessageService } from '../services/message.service';
 import { MessageDto } from '../dto/message.dto';
 import { profanity } from '@2toad/profanity';
-import { generateSafeNumericId } from 'src/utils/helpers';
+import { buildConfigMap, generateSafeNumericId } from 'src/utils/helpers';
 import { UsersService } from 'src/modules/users/services/users.service';
 import { ConversationService } from 'src/modules/conversations/services/conversation.service';
 import { SendMessageDto } from '../dto/send-message.dto';
@@ -92,7 +92,7 @@ export class SendMessageUseCase {
       String(senderId),
     );
 
-    const configMap = this.buildConfigMap(chatConfigs);
+    const configMap = buildConfigMap(chatConfigs);
 
     const allowed = await this.isConversationAllowed(conversation, configMap);
     if (!allowed) {
@@ -102,27 +102,6 @@ export class SendMessageUseCase {
     }
   }
   
-  private buildConfigMap(chatConfigs: any[]): Map<string, number> {
-    const defaultKeys = [
-      'teacher_to_teacher_chat',
-      'teacher_to_student_chat',
-      'student_group_chat',
-      'teacher_group_chat',
-    ];
-
-    const configMap = new Map(
-      chatConfigs.map((c) => [c.feature_key, Number(c.value)]),
-    );
-
-    for (const key of defaultKeys) {
-      if (!configMap.has(key)) {
-        configMap.set(key, 1);
-      }
-    }
-
-    return configMap;
-  }
-
   private async isConversationAllowed(
     conversation: any,
     configMap: Map<string, number>,

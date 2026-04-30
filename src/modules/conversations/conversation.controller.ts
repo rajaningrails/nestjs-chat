@@ -41,19 +41,15 @@ export class ConversationController {
   @Get('searchConversation')
   async findBySearch(
     @Query('school_id') school_id: number,
-    @Query('receiver_id') receiver_id: number,
-    @Query('sender_id') sender_id: number,
-    @Query('type') type: ConversationType,
+    @Query('conversationId') conversationId: number,
   ): Promise<{
     conversation_exists: boolean;
     data: any;
     message: string;
-  }> {
+  }|null> {
     return this.conversationRepository.findConversation(
       school_id,
-      sender_id,
-      receiver_id,
-      type,
+      conversationId
     );
   }
 

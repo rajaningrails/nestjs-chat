@@ -7,7 +7,6 @@ import {
   Body,
 } from '@nestjs/common';
 import { ConversationRepository } from './repositories/conversation.repository';
-import { ConversationType } from './dto/conversations.enum';
 import { DeleteConversationDto } from './dto/conversation-delete.dto';
 
 @Controller()
@@ -66,11 +65,11 @@ export class ConversationController {
   ) {
     const offset = (page - 1) * limit; 
     const response =
-      await this.conversationRepository.getConversationMessagesWithBuffer(
-        conversation_id,
-        limit,
-        offset,
-      );
+    await this.conversationRepository.getConversationMessagesWithBuffer(
+      conversation_id,
+      limit,
+      offset,
+    );
     return response;
   }
 }

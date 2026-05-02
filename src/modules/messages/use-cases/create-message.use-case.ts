@@ -9,6 +9,8 @@ import { generateSafeNumericId } from 'src/utils/helpers';
 import { UserRepository } from 'src/modules/users/repositories/user.repository';
 import { MessageService } from '../services/message.service';
 import { S3PresignedUrlService } from 'src/common/services/aws.service';
+import Redis from 'ioredis';
+import { RedisService } from 'src/common/services/redis.service';
 
 @Injectable()
 export class CreateMessageUseCase {
@@ -18,8 +20,11 @@ export class CreateMessageUseCase {
     private readonly userRepository: UserRepository,
     private readonly messageService: MessageService,
     private readonly s3Service: S3PresignedUrlService,
+    private readonly redisService: RedisService,
   ) {}
-
+  private get redis(): Redis {
+    return this.redisService.getClient();
+  }
   async execute(request: CreateMessageDto) {
     if (request.message!?.trim().length > 0) {
       if (profanity.exists(request.message!)) {
@@ -83,6 +88,37 @@ export class CreateMessageUseCase {
       }),
     ]);
 
+    const bufferKey = `buffer:message:create:${conversation_id}`;
+    const bufferPayload = JSON.stringify({
+      id: message_id,
+      conversation_id,
+      message: request.message ?? '',
+      attachments: request.attachments ?? [],
+      seen_at: null,
+      deleted_at: null,
+      sender_id: request.sender_id,
+      receiver_id: request.receiver_id,
+      group_id: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      sender: {
+        id: request.sender_id,
+        name: request.sender_name,
+        image: request.sender_image ?? '',
+        type: request.sender_user_type,
+      },
+      receiver: {
+        id: request.receiver_id,
+        name: request.receiver_name,
+        image: request.receiver_image ?? '',
+        type: request.receiver_user_type,
+      },
+    });
+
+    await Promise.all([
+      this.redis.lpush(bufferKey, bufferPayload),
+      this.redis.expire(bufferKey, 60),
+    ]);
     return {
       id: message_id,
       message: request.message ?? '',

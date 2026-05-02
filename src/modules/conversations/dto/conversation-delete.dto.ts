@@ -15,6 +15,5 @@ export class DeleteConversationDto {
   conversationID?: number;
 
   @IsOptional()
-  @IsNumberString()
   groupID?: number;
 }

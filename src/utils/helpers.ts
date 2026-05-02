@@ -1,4 +1,5 @@
 import { IS_ALPHA } from 'class-validator';
+import { ConversationType } from 'src/modules/conversations/dto/conversations.enum';
 import { UserType, IsAdmin } from 'src/modules/users/dto/user-type.enum';
 
 export function toMySQLDate(date: Date | string): Date {
@@ -7,23 +8,29 @@ export function toMySQLDate(date: Date | string): Date {
 
 export async function executeWithRetry<T>(
   operation: () => Promise<T>,
-  retries = this.MAX_DB_RETRIES,
+  options?: {
+    retries?: number;
+    sleep?: (ms: number) => Promise<void>;
+  }
 ): Promise<T> {
-  let lastError: Error | undefined = undefined;
+  const retries = options?.retries ?? 3;
+
+  const sleep =
+    options?.sleep ??
+    ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+
+  let lastError: Error | undefined;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       return await operation();
     } catch (error) {
-      if (error instanceof Error) {
-        lastError = error;
-      } else {
-        lastError = new Error(String(error));
-      }
+      lastError =
+        error instanceof Error ? error : new Error(String(error));
 
       if (attempt < retries) {
         const delay = Math.pow(2, attempt) * 1000;
-        await this.sleep(delay);
+        await sleep(delay);
       }
     }
   }
@@ -84,4 +91,37 @@ export function buildConfigMap(chatConfigs: any[]): Map<string, number> {
   }
 
   return configMap;
+}
+
+export function isConversationEnabled(conv: any, chatConfigs: any): boolean {
+  chatConfigs = buildConfigMap(chatConfigs);
+
+  const convType = conv?.c_type;
+  const groupType = conv?.c_group_type;
+  const senderType = conv?.sender_user_type;
+  const receiverType = conv?.receiver_user_type;
+  if (convType === ConversationType.USER) {
+    if (senderType === 'staff' && receiverType === 'staff') {
+      return chatConfigs.has('teacher_to_teacher_chat');
+    }
+
+    if (
+      (senderType === 'staff' && receiverType === 'student') ||
+      (senderType === 'student' && receiverType === 'staff')
+    ) {
+      return chatConfigs.has('teacher_to_student_chat');
+    }
+  }
+
+  if (convType === ConversationType.GROUP) {
+    if (groupType === 'student_group') {
+      return chatConfigs.has('student_group_chat');
+    }
+
+    if (groupType === 'teacher_group') {
+      return chatConfigs.has('teacher_group_chat');
+    }
+  }
+
+  return true;
 }

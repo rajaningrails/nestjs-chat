@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, EntityManager, IsNull, Repository } from 'typeorm';
 import { IConversationRepository } from './conversation.repository.interface';
 import { Conversation } from '../entities/conversation.entity';
-import { buildConfigMap, toMySQLDate } from 'src/utils/helpers';
+import { buildConfigMap, isConversationEnabled, toMySQLDate } from 'src/utils/helpers';
 import { CreateConversationDto } from '../dto/create-conversation.dto';
 import { UpdateConversationDto } from '../dto/update-conversation.dto';
 import { ConversationType, GroupType } from '../dto/conversations.enum';
@@ -119,7 +119,7 @@ export class ConversationRepository implements IConversationRepository {
       String(conversation?.last_message_sender_id),
     );
 
-    const isDisabled = !this.isConversationEnabled(convWithTypes, chatConfigs);
+    const isDisabled = !isConversationEnabled(convWithTypes, chatConfigs);
 
     const [groupImage, senderImage, receiverImage] = await Promise.all([
       conversation?.group?.group_image
@@ -337,7 +337,7 @@ export class ConversationRepository implements IConversationRepository {
         String(conversation?.last_message_sender_id),
       );
 
-      const isDisabled = !this.isConversationEnabled(
+      const isDisabled = !isConversationEnabled(
         convWithTypes,
         chatConfigs,
       );
@@ -533,7 +533,7 @@ export class ConversationRepository implements IConversationRepository {
 
       const processedConversations = await Promise.all(
         conversations.map(async (conv: any) => {
-          const isDisabled = !this.isConversationEnabled(conv, chatConfigs);
+          const isDisabled = !isConversationEnabled(conv, chatConfigs);
 
           const [userImage, groupImage, isOnline] = await Promise.all([
             conv.other_user_profile_image
@@ -650,7 +650,7 @@ export class ConversationRepository implements IConversationRepository {
           offset,
         ),
         this.messageRepository.countConversationMessage(conversationId),
-        conversationQueryBuilder.getRawOne(), // FIX #2: was .getOne()
+        conversationQueryBuilder.getRawOne(),
       ]);
 
     const buffered = bufferedRaw
@@ -721,7 +721,7 @@ export class ConversationRepository implements IConversationRepository {
         ? await this.chatConfigRepository.findBy(String(senderId))
         : [];
 
-    const isDisabled = !this.isConversationEnabled(
+    const isDisabled = !isConversationEnabled(
       conversationInfo,
       chatConfigs,
     );
@@ -739,39 +739,6 @@ export class ConversationRepository implements IConversationRepository {
       is_disabled: isDisabled,
     };
   }
-
-  isConversationEnabled = (conv: any, chatConfigs: any): boolean => {
-    chatConfigs = buildConfigMap(chatConfigs);
-
-    const convType = conv?.c_type;
-    const groupType = conv?.c_group_type;
-    const senderType = conv?.sender_user_type;
-    const receiverType = conv?.receiver_user_type;
-    if (convType === ConversationType.USER) {
-      if (senderType === 'staff' && receiverType === 'staff') {
-        return chatConfigs.has('teacher_to_teacher_chat');
-      }
-
-      if (
-        (senderType === 'staff' && receiverType === 'student') ||
-        (senderType === 'student' && receiverType === 'staff')
-      ) {
-        return chatConfigs.has('teacher_to_student_chat');
-      }
-    }
-
-    if (convType === ConversationType.GROUP) {
-      if (groupType === 'student_group') {
-        return chatConfigs.has('student_group_chat');
-      }
-
-      if (groupType === 'teacher_group') {
-        return chatConfigs.has('teacher_group_chat');
-      }
-    }
-
-    return true;
-  };
 
   async deleteAllMessages(request: DeleteConversationDto) {
     const conversationExists = await this.findById(request.conversationID!);

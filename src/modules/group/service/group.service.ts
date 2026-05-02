@@ -12,7 +12,7 @@ import {
   GroupType,
 } from 'src/modules/conversations/dto/conversations.enum';
 import { MessageRepository } from 'src/modules/messages/repositories/message.repository';
-import { generateSafeNumericId } from 'src/utils/helpers';
+import { buildConfigMap, generateSafeNumericId } from 'src/utils/helpers';
 import { UserRepository } from 'src/modules/users/repositories/user.repository';
 import { SocketService } from 'src/common/services/socket/socket.service';
 import { S3PresignedUrlService } from 'src/common/services/aws.service';
@@ -122,37 +122,17 @@ export class GroupService {
     groupType: GroupType,
   ): Promise<void> {
     const chatConfigs = await this.chatConfigRepository.findBy(String(userId));
-    const configMap = this.buildConfigMap(chatConfigs);
+    const configMap = buildConfigMap(chatConfigs);
 
     const featureKey =
       groupType === GroupType.TEACHERS_GROUP
         ? 'teacher_group_chat'
         : 'student_group_chat';
 
-    if (configMap.get(featureKey) !== 1) {
+    if (configMap.get(featureKey) !== 1 && configMap.has(featureKey)) {
       throw new ForbiddenException(
         `You are not allowed to manage ${groupType === GroupType.TEACHERS_GROUP ? 'staff' : 'student'} groups`,
       );
     }
-  }
-  private buildConfigMap(chatConfigs: any[]): Map<string, number> {
-    const defaultKeys = [
-      'teacher_to_teacher_chat',
-      'teacher_to_student_chat',
-      'student_group_chat',
-      'teacher_group_chat',
-    ];
-
-    const configMap = new Map(
-      chatConfigs.map((c) => [c.feature_key, Number(c.value)]),
-    );
-
-    for (const key of defaultKeys) {
-      if (!configMap.has(key)) {
-        configMap.set(key, 1);
-      }
-    }
-
-    return configMap;
   }
 }

@@ -574,7 +574,8 @@ export class ConversationRepository implements IConversationRepository {
             is_muted: 0,
             muted_by_ids: null,
             is_disabled: isDisabled,
-            deleteMessageFlag: conv.last_message_delete_at ? 1 : 0,
+            deleted_at: conv.last_message_delete_at,
+            deletedMessageFlag: conv.last_message_delete_at ? 1 : 0,
             user_id:
               conv.type === ConversationType.USER ? conv.other_user_id : null,
             user_details:

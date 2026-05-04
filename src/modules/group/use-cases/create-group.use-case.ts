@@ -20,6 +20,7 @@ export class CreateGroupUseCase {
   async execute(request: CreateChatGroupDto) {
     const exists = await this.groupRepository.findGroupByName(
       request.group_name,
+      request.school_id
     );
     if (exists) {
       throw new ConflictException('Group name already exists');

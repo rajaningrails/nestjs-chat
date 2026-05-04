@@ -73,13 +73,13 @@ export class GroupRepository implements IGroupRepository {
 
   async findGroupByName(
     group_name: string,
-    group_id: number | null = null,
+    school_id: number
   ): Promise<boolean> {
     const existingGroup = await this.groupRepo.findOne({
       where: {
         group_name: group_name?.trim()?.toLowerCase(),
         deleted_at: IsNull(),
-        ...((group_id && { id: Not(group_id) }) as any),
+        school_id
       },
     });
 

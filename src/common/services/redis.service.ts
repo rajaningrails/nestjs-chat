@@ -15,25 +15,25 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private isConnected: boolean = false;
 
   constructor(private configService: ConfigService) {
-    this.client = new Redis({
-      host: this.configService.get<string>('redis.host', 'localhost'),
-      port: this.configService.get<number>('redis.port', 6379),
-      password: this.configService.get<string>('redis.password') || undefined,
-      db: this.configService.get<number>('redis.db', 0),
-      lazyConnect: true,
-      retryStrategy: (times) => {
-        const delay = Math.min(times * 50, 2000);
-        this.logger.warn(
-          `Redis reconnection attempt #${times}, retrying in ${delay}ms`,
-        );
-        return delay;
+    this.client = new Redis(
+      this.configService.get<string>('redis.url', '')!,
+      {
+        lazyConnect: true,
+        retryStrategy: (times) => {
+          const delay = Math.min(times * 50, 2000);
+          this.logger.warn(
+            `Redis reconnection attempt #${times}, retrying in ${delay}ms`,
+          );
+          return delay;
+        },
+        maxRetriesPerRequest: null,
+        enableReadyCheck: false,
+        reconnectOnError: (err) => {
+          const targetErrors = ['ECONNREFUSED', 'NR_CLOSED'];
+          return targetErrors.some((e) => err.message.includes(e));
+        },
       },
-      maxRetriesPerRequest: 3,
-      reconnectOnError: (err) => {
-        const targetErrors = ['ECONNREFUSED', 'NR_CLOSED'];
-        return targetErrors.some((e) => err.message.includes(e));
-      },
-    });
+    );
 
     this.client.on('connect', () => {
       this.logger.log('Redis Client Connected');
@@ -54,6 +54,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
+    await this.client.connect();
     await this.client.ping();
     await this.enableKeyspaceNotifications();
   }

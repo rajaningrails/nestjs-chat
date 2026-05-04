@@ -196,8 +196,8 @@ export class DLQRecoveryService implements OnModuleInit {
         await this.executeIndividualOperation(repository, operation, record);
         successCount++;
         await this.sleep(50);
-      } catch (error) {
-        failedRecords.push({ operation, record, error: error.message });
+      } catch (error:any) {
+        failedRecords.push({ operation, record, error: error?.message});
       }
     }
 

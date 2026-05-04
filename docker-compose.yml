@@ -4,10 +4,26 @@ services:
   app:
     build:
       context: .
-      target: production 
+      target: production
     ports:
       - "3000:3000"
-      - "4000:4000"
+    environment:
+      NODE_ENV: development
+
+      DATABASE_HOST: db
+      DATABASE_PORT: 3306
+      DATABASE_USERNAME: chat_user
+      DATABASE_PASSWORD: chatpassword123
+      DATABASE_NAME: chat_db
+
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      REDIS_DB: 0
+
+    depends_on:
+      - db
+      - redis
     restart: unless-stopped
 
   db:
@@ -18,8 +34,6 @@ services:
       MYSQL_DATABASE: chat_db
       MYSQL_USER: chat_user
       MYSQL_PASSWORD: chatpassword123
-    ports:
-      - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     restart: unless-stopped
@@ -27,8 +41,6 @@ services:
   redis:
     image: redis:7-alpine
     command: redis-server --appendonly yes
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped

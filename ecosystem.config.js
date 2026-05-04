@@ -23,8 +23,6 @@ module.exports = {
         DB_USER: 'admin',
         DB_PASSWORD: 'password',
         DB_NAME: 'chat',
-        REDIS_HOST: 'localhost',
-        REDIS_PORT: 6379,
       },
       
       env_production: {
@@ -35,8 +33,6 @@ module.exports = {
         DB_USER: 'admin',
         DB_PASSWORD: 'password',
         DB_NAME: 'chatdb',
-        REDIS_HOST: 'localhost',
-        REDIS_PORT: 6379,
       },
       
       error_file: './logs/err.log',

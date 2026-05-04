@@ -15,7 +15,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private isConnected: boolean = false;
 
   constructor(private configService: ConfigService) {
-    this.client = new Redis(this.configService.get<string>('REDIS_URL')!, {
+    this.client = new Redis(this.configService.get<string>('redis.url')!, {
       lazyConnect: true,
       retryStrategy: (times) => {
         const delay = Math.min(times * 50, 2000);

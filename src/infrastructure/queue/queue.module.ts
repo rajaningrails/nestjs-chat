@@ -10,10 +10,11 @@ import { queueConfig } from '../config/queue.config';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         connection: {
-          host: configService.get<string>('queue.redis.host'),
-          port: configService.get<number>('queue.redis.port'),
-          password: configService.get<string>('queue.redis.password'),
-          db: configService.get<number>('queue.redis.db'),
+          url: configService.get<string>('queue.redis.url'),
+          // host: configService.get<string>('queue.redis.host'),
+          // port: configService.get<number>('queue.redis.port'),
+          // password: configService.get<string>('queue.redis.password'),
+          // db: configService.get<number>('queue.redis.db'),
           maxRetriesPerRequest: null,
           enableReadyCheck: true,
           enableOfflineQueue: false,

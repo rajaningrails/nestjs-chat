@@ -23,10 +23,10 @@ export class ChatGroupMember {
   @Column({ type: 'int' })
   user_id: number;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp' })
   created_at: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at: Date;
 
   @ManyToOne(() => ChatGroup, (group) => group.members, { onDelete: 'CASCADE' })

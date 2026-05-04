@@ -141,7 +141,7 @@ export class GroupRepository implements IGroupRepository {
       user_id: p.seen_update_sender_id,
       group_id: p.group_id,
     }));
-    console.log('executed');
+    console.log('executed',values);
     await this.groupMessageSeenRepo
       .createQueryBuilder()
       .insert()

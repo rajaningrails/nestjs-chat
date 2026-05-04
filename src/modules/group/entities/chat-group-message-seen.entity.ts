@@ -38,10 +38,10 @@ export class GroupMessageSeen {
   @Column({ type: 'int' })
   user_id: number;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp' })
   created_at: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at: Date;
 
   @ManyToOne(() => Conversation, (c) => c.seen_messages, { onDelete: 'CASCADE' })

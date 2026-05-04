@@ -23,9 +23,9 @@ export class ChatConfig {
   @Column({ type: 'enum', enum: [0, 1] })
   value: number;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp' })
   created_at: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at: Date;
 }

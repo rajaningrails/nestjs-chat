@@ -14,8 +14,8 @@ export class DebugController {
   constructor(private readonly socketService: SocketService) {}
 
   @Get('monitor')
-  serveMonitor(@Res() res) {
-    res.sendFile('socket-monitor.html');
+  getMonitor() {
+    return { url: '/static/socket-monitor.html' };
   }
 
   @Get('online-users')

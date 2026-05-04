@@ -23,6 +23,14 @@ export class CreateUserDto {
   @IsString()
   image: string;
 
+  @IsOptional()
+  @IsString()
+  class?: string;
+
+  @IsOptional()
+  @IsString()
+  section?: string;
+
   @IsEnum(UserType)
   @IsNotEmpty()
   type: UserType;

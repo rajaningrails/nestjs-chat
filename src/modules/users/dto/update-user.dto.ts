@@ -26,4 +26,13 @@ export class UpdateUserDto {
   @IsInt()
   @IsNotEmpty()
   user_id: number;
+
+  @IsOptional()
+  @IsString()
+  class?: string;
+
+  @IsOptional()
+  @IsString()
+  section?: string;
+
 }

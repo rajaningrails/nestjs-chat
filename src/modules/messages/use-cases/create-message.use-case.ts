@@ -51,6 +51,8 @@ export class CreateMessageUseCase {
           user_id: request.receiver_id,
           image: request.receiver_image,
           name: request.receiver_name,
+          class: request.receiver_class,
+          section: request.receiver_section,
         },
       ] as CreateUserDto[]),
     ]);

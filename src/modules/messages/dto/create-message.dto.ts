@@ -61,4 +61,12 @@ export class CreateMessageDto {
   @IsString()
   @IsOptional()
   receiver_image: string;
+
+  @IsString()
+  @IsOptional()
+  receiver_class: string;
+
+  @IsString()
+  @IsOptional()
+  receiver_section: string;
 }

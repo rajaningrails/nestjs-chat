@@ -1,73 +1,51 @@
 import {
   Controller,
-  Get,
   Post,
   Body,
-  Param,
-  Query,
   Inject,
-  ParseUUIDPipe,
-  Delete,
 } from '@nestjs/common';
-import type { IMessageRepository } from './repositories/message.repository.interface';
-import { IMessageRepositoryToken } from './repositories/message.repository.interface';
-import { MessageService } from './services/message.service';
-import { MessageDto } from './dto/message.dto';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CreateMessageDto } from './dto/create-message.dto';
+import { SendMessageUseCase } from './use-cases/send-message.use-case';
+import { CreateMessageUseCase } from './use-cases/create-message.use-case';
+import { DeleteMessageUseCase } from './use-cases/delete-message.use-case';
+import { DeleteMessageDto } from './dto/delete-message.dto';
+import { SeenMessageDto } from './dto/seen-message.dto';
+import { MessageSeenUseCase } from './use-cases/message-seen.use-case';
+import { SendMessageDto } from './dto/send-message.dto';
 
-@Controller('messages')
+@Controller()
 export class MessageController {
   constructor(
-    @Inject(IMessageRepositoryToken)
-    private readonly messageRepository: IMessageRepository,
-    private readonly messageService: MessageService,
+    private readonly sendMessageUseCase: SendMessageUseCase,
+    private readonly createMessageUseCase: CreateMessageUseCase,
+    private readonly deleteMessageUseCase: DeleteMessageUseCase,
+    private readonly seenMessageUseCase: MessageSeenUseCase,
   ) {}
 
   @SkipThrottle()
-  @Post('send')
-  async sendMessage(@Body() dto: MessageDto) {
-    return this.messageService.sendMessage(dto);
+  @Post('send-message')
+  async sendMessage(@Body() dto: Partial<SendMessageDto>) {
+    return this.sendMessageUseCase.execute(dto);
   }
 
   @Post('create-message')
   async createMessageConnection(@Body() dto: CreateMessageDto) {
-    return this.messageService.createMessageConnection(dto);
+    return this.createMessageUseCase.execute(dto);
   }
 
-  // @Post('seen')
-  // async markAsSeen(@Body() dto: MarkSeenDto) {
-  //   return this.messageService.markMessageAsSeen(dto);
+  @Post('update-seen-at/conversation')
+  async markAsSeen(@Body() dto: SeenMessageDto) {
+    return this.seenMessageUseCase.execute(dto);
+  }
+
+  @Post('deleteMessage')
+  async deleteMessage(@Body() request: DeleteMessageDto) {
+    return this.deleteMessageUseCase.execute(request);
+  }
+
+  // @Get(':id')
+  // async findOne(@Param('id', ParseUUIDPipe) id: number) {
+  //   return this.messageRepository.findById(id);
   // }
-
-  @Get()
-  async getMessages(
-    @Query('sender_id') senderId: number,
-    @Query('receiver_id') receiverId?: number,
-    @Query('group_id') groupId?: number,
-    @Query('limit') limit = 20,
-    @Query('offset') offset = 0,
-  ) {
-    return this.messageService.getMessages(
-      +senderId,
-      receiverId ? +receiverId : undefined,
-      groupId ? +groupId : undefined,
-      +limit,
-      +offset,
-    );
-  }
-
-  
-  @Delete(':id')
-  async deleteMessage(
-    @Param('id') messageId: string,
-    @Query('user_id') userId: number,
-  ) {
-    return this.messageService.deleteMessage(messageId, +userId);
-  }
-
-  @Get(':id')
-  async findOne(@Param('id', ParseUUIDPipe) id: number) {
-    return this.messageRepository.findById(id);
-  }
 }

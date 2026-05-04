@@ -4,3 +4,8 @@ export enum UserType {
   CLIENT = 'client',
   STUDENT = 'student',
 }
+
+export enum IsAdmin {
+  NO = 0,
+  YES = 1,
+}

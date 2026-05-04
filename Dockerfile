@@ -31,7 +31,7 @@ EXPOSE 3000
 
 ENTRYPOINT ["dumb-init", "--"]
 
-CMD ["npm", "run", "pm2:start:prod"]
+# CMD ["npm", "run", "pm2:start:prod"]
 
 # Alternative direct start ko lagi 
-# CMD ["node", "dist/main"]
+CMD ["node", "dist/main"]

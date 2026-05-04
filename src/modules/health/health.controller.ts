@@ -12,8 +12,6 @@ export class HealthController {
   @Get()
   @Public()
   async check() {
-    const queueStats = await this.messageQueue.getJobCounts();
-    
     return {
       uptime: process.uptime(),
       process: {
@@ -25,13 +23,39 @@ export class HealthController {
         },
         cpu: process.cpuUsage(),
       },
-      queue: {
-        waiting: queueStats.waiting,
-        active: queueStats.active,
-        completed: queueStats.completed,
-        failed: queueStats.failed,
-        delayed: queueStats.delayed,
-      },
+    };
+  }
+
+  @Get('queues')
+  async checkQueues() {
+    const queues = [
+      { name: 'messages', queue: this.messageQueue },
+    ];
+
+    const status = await Promise.all(
+      queues.map(async ({ name, queue }) => {
+        const [waiting, active, completed, failed] = await Promise.all([
+          queue.getWaitingCount(),
+          queue.getActiveCount(),
+          queue.getCompletedCount(),
+          queue.getFailedCount(),
+        ]);
+
+        return {
+          name,
+          waiting,
+          active,
+          completed,
+          failed,
+          healthy: failed < 100 && active < 1000,
+        };
+      }),
+    );
+
+    return {
+      timestamp: new Date(),
+      queues: status,
+      overall: status.every((q) => q.healthy),
     };
   }
 }

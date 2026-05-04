@@ -3,8 +3,8 @@ import {
   IsInt,
   IsNotEmpty,
   IsOptional,
-  IsString,
   IsDateString,
+  IsNumber,
 } from 'class-validator';
 import { ConversationType, GroupType } from './conversations.enum';
 
@@ -13,8 +13,8 @@ export class CreateConversationDto {
   @IsNotEmpty()
   school_id: number;
 
+  @IsNumber()
   @IsOptional()
-  @IsInt()
   group_id?: number;
 
   @IsEnum(ConversationType)
@@ -26,22 +26,22 @@ export class CreateConversationDto {
   group_type?: GroupType;
 
   @IsOptional()
-  @IsInt()
+  @IsNumber()
   last_message_id?: number;
 
   @IsOptional()
-  @IsString()
-  last_message?: string;
-
-  @IsOptional()
-  @IsInt()
+  @IsNumber()
   last_message_sender_id?: number;
 
   @IsOptional()
-  @IsInt()
+  @IsNumber()
   last_message_receiver_id?: number;
 
-  @IsOptional()
   @IsDateString()
-  last_message_seen_at?: Date | null;
+  @IsOptional()
+  created_at?: Date;
+
+  @IsDateString()
+  @IsOptional()
+  updated_at?: Date;
 }

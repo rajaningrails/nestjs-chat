@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Authorized</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1117;
+    --surface2: #161b22;
+    --border: #21262d;
+    --accent: #00ff87;
+    --accent2: #00d4ff;
+    --warn: #ffa657;
+    --danger: #ff4444;
+    --text: #e6edf3;
+    --muted: #7d8590;
+    --online: #26c940;
+    --offline: #444c56;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,135,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,135,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container { position: relative; z-index: 1; padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 10px rgba(0,255,135,0.4); }
+    50% { box-shadow: 0 0 24px rgba(0,255,135,0.8); }
+  }
+
+  .logo-icon svg { width: 20px; height: 20px; fill: #000; }
+
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+
+  h1 span { color: var(--accent); }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0,255,135,0.08);
+    border: 1px solid rgba(0,255,135,0.2);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 1px;
+    font-weight: 500;
+  }
+
+  .live-dot {
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: blink 1.2s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
+
+  .last-updated {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* Stats row */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .stat-card:hover { border-color: rgba(0,255,135,0.3); }
+
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .stat-card.green::after { background: linear-gradient(90deg, var(--accent), transparent); }
+  .stat-card.blue::after  { background: linear-gradient(90deg, var(--accent2), transparent); }
+  .stat-card.orange::after { background: linear-gradient(90deg, var(--warn), transparent); }
+  .stat-card.red::after   { background: linear-gradient(90deg, var(--danger), transparent); }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 10px;
+  }
+
+  .stat-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 36px;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .stat-card.green .stat-value { color: var(--accent); }
+  .stat-card.blue .stat-value  { color: var(--accent2); }
+  .stat-card.orange .stat-value { color: var(--warn); }
+  .stat-card.red .stat-value   { color: var(--danger); }
+
+  .stat-sub { font-size: 11px; color: var(--muted); }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .search-box {
+    flex: 1;
+    min-width: 220px;
+    position: relative;
+  }
+
+  .search-box input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 12px 9px 36px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .search-box input:focus { border-color: rgba(0,255,135,0.4); }
+  .search-box input::placeholder { color: var(--muted); }
+
+  .search-icon {
+    position: absolute;
+    left: 11px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .filter-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 14px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .filter-btn:hover, .filter-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,255,135,0.05);
+  }
+
+  .refresh-btn {
+    background: rgba(0,255,135,0.1);
+    border: 1px solid rgba(0,255,135,0.3);
+    border-radius: 8px;
+    padding: 9px 16px;
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .refresh-btn:hover { background: rgba(0,255,135,0.18); }
+  .refresh-btn.spinning svg { animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Table */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .table-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .table-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .table-count {
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2px 10px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  thead th {
+    padding: 10px 20px;
+    text-align: left;
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-weight: 400;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+    animation: fadeIn 0.3s ease both;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+  td {
+    padding: 14px 20px;
+    font-size: 13px;
+    vertical-align: middle;
+  }
+
+  .user-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .avatar {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+    font-family: 'Syne', sans-serif;
+  }
+
+  .user-id {
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .school-badge {
+    display: inline-block;
+    background: rgba(0,212,255,0.08);
+    border: 1px solid rgba(0,212,255,0.2);
+    color: var(--accent2);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  .conn-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .conn-count {
+    font-size: 15px;
+    font-weight: 700;
+    min-width: 28px;
+    text-align: right;
+  }
+
+  .conn-bar {
+    flex: 1;
+    max-width: 100px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .conn-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border-radius: 20px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+
+  .status-pill.active {
+    background: rgba(38,201,64,0.1);
+    border: 1px solid rgba(38,201,64,0.25);
+    color: var(--online);
+  }
+
+  .status-pill.inactive {
+    background: rgba(68,76,86,0.3);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+  }
+
+  .status-pill.active .status-dot { background: var(--online); animation: blink 1.5s ease-in-out infinite; }
+  .status-pill.inactive .status-dot { background: var(--offline); }
+
+  .socket-ids {
+    font-size: 10px;
+    color: var(--muted);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .socket-ids:hover { color: var(--text); }
+
+  .age-text { color: var(--muted); font-size: 12px; }
+
+  .kick-btn {
+    background: transparent;
+    border: 1px solid rgba(255,68,68,0.3);
+    color: rgba(255,68,68,0.6);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .kick-btn:hover {
+    background: rgba(255,68,68,0.1);
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+
+  .empty-state svg { opacity: 0.2; margin-bottom: 12px; }
+  .empty-state p { font-size: 13px; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* Toasts */
+  .toast-container {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    display: flex; flex-direction: column; gap: 8px;
+    z-index: 9999;
+  }
+
+  .toast {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--text);
+    animation: slideUp 0.3s ease;
+    max-width: 280px;
+  }
+
+  .toast.success { border-left: 3px solid var(--accent); }
+  .toast.error { border-left: 3px solid var(--danger); }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-width: 900px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (max-width: 600px) {
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+    td:nth-child(5), th:nth-child(5),
+    td:nth-child(6), th:nth-child(6) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+      </div>
+      <div>
+        <h1>Socket<span>Monitor</span></h1>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+      <div class="last-updated" id="lastUpdated">—</div>
+    </div>
+  </header>
+
+  <div class="stats-grid">
+    <div class="stat-card green">
+      <div class="stat-label">Total Users</div>
+      <div class="stat-value" id="statTotalUsers">0</div>
+      <div class="stat-sub">unique user IDs</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-label">Active Connections</div>
+      <div class="stat-value" id="statActiveConn">0</div>
+      <div class="stat-sub">open sockets</div>
+    </div>
+    <div class="stat-card orange">
+      <div class="stat-label">Online Now</div>
+      <div class="stat-value" id="statOnline">0</div>
+      <div class="stat-sub">users with sockets</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">High Conn Users</div>
+      <div class="stat-value" id="statHighConn">0</div>
+      <div class="stat-sub">more than 3 sockets</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="search-box">
+      <span class="search-icon">⌕</span>
+      <input type="text" id="searchInput" placeholder="Search user_id..." oninput="applyFilters()" />
+    </div>
+    <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+    <button class="filter-btn" onclick="setFilter('active', this)">Active</button>
+    <button class="filter-btn" onclick="setFilter('inactive', this)">Inactive</button>
+    <button class="filter-btn" onclick="setFilter('high', this)">High Conn</button>
+    <button class="refresh-btn" id="refreshBtn" onclick="fetchData()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Refresh
+    </button>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-header-row">
+      <span class="table-title">Connection Registry</span>
+      <span class="table-count" id="tableCount">0 entries</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>User ID</th>
+          <th>Connections</th>
+          <th>Status</th>
+          <th>Socket IDs</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr>
+          <td colspan="6">
+            <div class="empty-state">
+              <p>Loading connections...</p>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+const SERVER_URL = window.location.origin; 
+const REFRESH_INTERVAL = 60000; 
+const HIGH_CONN_THRESHOLD = 3;
+
+let allData = [];
+let currentFilter = 'all';
+let refreshTimer = null;
+
+const AVATAR_COLORS = [
+  ['#00ff87','#000'],['#00d4ff','#000'],['#ffa657','#000'],
+  ['#ff4444','#fff'],['#bf91f3','#000'],['#ff7b72','#000'],
+  ['#39d353','#000'],['#f78166','#000']
+];
+
+function getAvatarColor(id) {
+  return AVATAR_COLORS[Number(id) % AVATAR_COLORS.length];
+}
+
+// ─── FETCH ──────────────────────────────────────────────────────────────
+async function fetchData() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+
+  try {
+    const res = await fetch(`${SERVER_URL}/debug/online-users`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+
+    allData = normalizeData(json.data ?? json);
+    renderStats();
+    applyFilters();
+    document.getElementById('lastUpdated').textContent =
+      'Updated ' + new Date().toLocaleTimeString();
+  } catch (err) {
+    showToast('Failed to fetch: ' + err.message, 'error');
+  } finally {
+    btn.classList.remove('spinning');
+  }
+}
+
+function normalizeData(json) {
+  if (Array.isArray(json.users)) {
+    return json.users.map(u => ({
+      user_id:      String(u.user_id ?? u.userId ?? '?'),
+      connections:  Number(u.socket_count ?? u.connections ?? u.socketCount ?? 0),
+      socket_ids:   Array.isArray(u.socket_ids) ? u.socket_ids : [],
+      active:       (u.socket_count ?? u.connections ?? 0) > 0
+    }));
+  }
+  if (typeof json === 'object' && !Array.isArray(json)) {
+    return Object.entries(json).map(([uid, sockets]) => ({
+      user_id:    String(uid),
+      connections: Array.isArray(sockets) ? sockets.length : 0,
+      socket_ids: Array.isArray(sockets) ? sockets : [],
+      active:     Array.isArray(sockets) && sockets.length > 0
+    }));
+  }
+  return [];
+}
+
+function getDemoData() {
+  const schools = ['101','102','103'];
+  return Array.from({length: 18}, (_, i) => {
+    const conns = [1,1,1,2,2,3,3,5,8][i % 9];
+    return {
+      user_id:    String(1000 + i * 7),
+      connections: conns,
+      socket_ids: Array.from({length: conns}, (_, j) => `sIO-${Math.random().toString(36).slice(2,10)}`),
+      active:     i % 5 !== 0
+    };
+  });
+}
+
+function renderStats() {
+  const total = allData.length;
+  const totalConn = allData.reduce((s, u) => s + u.connections, 0);
+  const online = allData.filter(u => u.active && u.connections > 0).length;
+  const high = allData.filter(u => u.connections >= HIGH_CONN_THRESHOLD).length;
+
+  animateNumber('statTotalUsers', total);
+  animateNumber('statActiveConn', totalConn);
+  animateNumber('statOnline', online);
+  animateNumber('statHighConn', high);
+}
+
+function animateNumber(id, target) {
+  const el = document.getElementById(id);
+  const start = parseInt(el.textContent) || 0;
+  const diff = target - start;
+  const steps = 20;
+  let step = 0;
+  const timer = setInterval(() => {
+    step++;
+    el.textContent = Math.round(start + diff * (step / steps));
+    if (step >= steps) clearInterval(timer);
+  }, 16);
+}
+
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilters();
+}
+
+function applyFilters() {
+  const q = document.getElementById('searchInput').value.toLowerCase().trim();
+  let filtered = allData;
+
+  if (q) {
+    filtered = filtered.filter(u =>
+      u.user_id.toLowerCase().includes(q)
+    );
+  }
+
+  if (currentFilter === 'active')   filtered = filtered.filter(u => u.active && u.connections > 0);
+  if (currentFilter === 'inactive') filtered = filtered.filter(u => !u.active || u.connections === 0);
+  if (currentFilter === 'high')     filtered = filtered.filter(u => u.connections >= HIGH_CONN_THRESHOLD);
+
+  renderTable(filtered);
+}
+
+function renderTable(data) {
+  const tbody = document.getElementById('tableBody');
+  document.getElementById('tableCount').textContent = data.length + ' entries';
+
+  if (!data.length) {
+    tbody.innerHTML = `
+      <tr><td colspan="6">
+        <div class="empty-state">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <p>No connections match your filter</p>
+        </div>
+      </td></tr>`;
+    return;
+  }
+
+  const maxConn = Math.max(...data.map(u => u.connections), 1);
+
+  tbody.innerHTML = data.map((u, idx) => {
+    const [bg, fg] = getAvatarColor(u.user_id);
+    const initials = u.user_id.slice(-2).toUpperCase();
+    const isHigh = u.connections >= HIGH_CONN_THRESHOLD;
+    const pct = Math.min((u.connections / maxConn) * 100, 100);
+    const barColor = isHigh ? 'var(--danger)' : u.connections > 1 ? 'var(--warn)' : 'var(--accent)';
+    const connColor = isHigh ? 'var(--danger)' : u.connections > 1 ? 'var(--warn)' : 'var(--text)';
+    const socketPreview = u.socket_ids.length
+      ? u.socket_ids.slice(0, 2).join(', ') + (u.socket_ids.length > 2 ? ` +${u.socket_ids.length - 2}` : '')
+      : '—';
+    const statusClass = (u.active && u.connections > 0) ? 'active' : 'inactive';
+    const statusLabel = (u.active && u.connections > 0) ? 'Active' : 'Inactive';
+
+    return `
+    <tr style="animation-delay:${idx * 0.03}s">
+      <td>
+        <div class="user-cell">
+          <div class="avatar" style="background:${bg};color:${fg}">${initials}</div>
+          <span class="user-id">${u.user_id}</span>
+        </div>
+      </td>
+      <td>
+        <div class="conn-bar-wrap">
+          <span class="conn-count" style="color:${connColor}">${u.connections}</span>
+          <div class="conn-bar">
+            <div class="conn-bar-fill" style="width:${pct}%;background:${barColor}"></div>
+          </div>
+        </div>
+      </td>
+      <td>
+        <span class="status-pill ${statusClass}">
+          <span class="status-dot"></span>${statusLabel}
+        </span>
+      </td>
+      <td>
+        <span class="socket-ids" title="${u.socket_ids.join('\n') || 'No sockets'}"
+          onclick="copySocketIds('${u.user_id}', ${JSON.stringify(u.socket_ids).replace(/'/g,'\\\'')})">
+          ${socketPreview}
+        </span>
+      </td>
+      <td>
+        <button class="kick-btn" onclick="kickUser('${u.user_id}')">Disconnect</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function copySocketIds(userId, ids) {
+  const text = ids.join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    showToast(`Copied ${ids.length} socket ID(s) for user ${userId}`, 'success');
+  });
+}
+
+async function kickUser(userId) {
+  if (!confirm(`Disconnect all sockets for user ${userId}?`)) return;
+  try {
+    const res = await fetch(`${SERVER_URL}/debug/kick-user/${userId}`, { method: 'POST' });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    showToast(`User ${userId} disconnected`, 'success');
+    await fetchData();
+  } catch (e) {
+    showToast('Kick failed (endpoint may not exist yet): ' + e.message, 'error');
+  }
+}
+
+function showToast(msg, type = 'success') {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+fetchData();
+refreshTimer = setInterval(fetchData, REFRESH_INTERVAL);
+</script>
+</body>
+</html>

@@ -5,9 +5,13 @@ import {
   IsOptional,
   ValidateIf,
   IsArray,
+  IsNumber,
 } from 'class-validator';
 
 export class MessageDto {
+  @IsNumber()
+  id: number;
+
   @IsInt()
   school_id: number;
 
@@ -20,11 +24,11 @@ export class MessageDto {
   receiver_id?: number;
 
   @ValidateIf(o => !o.receiver_id)
-  @IsInt()
+  @IsNumber()
   @IsOptional()
   group_id?: number;
 
-  @IsInt()
+  @IsNumber()
   conversation_id: number;
 
   @ValidateIf(o => !o.attachments || o.attachments.length === 0)

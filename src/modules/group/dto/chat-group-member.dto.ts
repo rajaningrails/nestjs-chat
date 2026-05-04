@@ -1,7 +1,7 @@
-import { IsInt, IsNotEmpty } from 'class-validator';
+import { IsInt, IsNotEmpty, IsNumber } from 'class-validator';
 
 export class CreateChatGroupMemberDto {
-  @IsInt()
+  @IsNumber()
   @IsNotEmpty()
   group_id: number;
 

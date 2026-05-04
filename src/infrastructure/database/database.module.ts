@@ -18,15 +18,18 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
         entities: [__dirname + '/../../**/*.entity{.ts,.js}'],
         migrations: [__dirname + '/migrations/*{.ts,.js}'],
 
-        synchronize: configService.get<boolean>('database.synchronize'),
+        // synchronize: configService.get<boolean>('database.synchronize'),
+        synchronize: true,
         logging: configService.get<boolean>('database.logging'),
 
         charset: 'utf8mb4',
         timezone: 'Z',
         extra: {
-          connectionLimit: 20, // Max connections per instance
+          connectionLimit: 20,
           waitForConnections: true,
           queueLimit: 0,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 10000,
         },
       }),
     }),

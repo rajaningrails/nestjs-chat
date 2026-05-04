@@ -1,11 +1,12 @@
 import {
+  IsDateString,
   IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
 } from 'class-validator';
-import { UserType } from './user-type.enum';
+import { IsAdmin, UserType } from './user-type.enum';
 
 export class CreateUserDto {
   @IsInt()
@@ -16,15 +17,25 @@ export class CreateUserDto {
   @IsNotEmpty()
   user_id: number;
 
-  @IsOptional()
   @IsString()
-  name?: string;
+  name: string;
 
-  @IsOptional()
   @IsString()
-  image?: string;
+  image: string;
 
   @IsEnum(UserType)
   @IsNotEmpty()
   type: UserType;
+
+  @IsDateString()
+  @IsOptional()
+  created_at?: string;
+
+  @IsDateString()
+  @IsOptional()
+  updated_at?: string;
+
+  @IsEnum(IsAdmin)
+  @IsOptional()
+  is_admin?: IsAdmin;
 }

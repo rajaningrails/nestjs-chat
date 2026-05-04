@@ -6,21 +6,28 @@ import {
   IsOptional,
   ValidateIf,
   IsArray,
+  IsNumber,
+  IsDate,
+  IsNumberString,
 } from 'class-validator';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
 
 export class CreateMessageDto {
-  @IsInt()
+  @IsNumber()
+  @IsOptional()
+  id: number;
+
+  @IsNumberString()
   @IsNotEmpty()
   school_id: number;
 
-  @IsInt()
+  @IsNumberString()
   @IsNotEmpty()
   sender_id: number;
 
-  @IsInt()
-  @IsOptional()
-  receiver_id?: number;
+  @IsNumberString()
+  @IsNotEmpty()
+  receiver_id: number;
 
   @ValidateIf(o => !o.attachments || o.attachments.length === 0)
   @IsString()
@@ -48,10 +55,10 @@ export class CreateMessageDto {
   receiver_name: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   sender_image: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   receiver_image: string;
 }

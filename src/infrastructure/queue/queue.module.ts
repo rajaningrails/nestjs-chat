@@ -14,9 +14,20 @@ import { queueConfig } from '../config/queue.config';
           port: configService.get<number>('queue.redis.port'),
           password: configService.get<string>('queue.redis.password'),
           db: configService.get<number>('queue.redis.db'),
-          // maxRetriesPerRequest: 3,
+          maxRetriesPerRequest: null,
           enableReadyCheck: true,
           enableOfflineQueue: false,
+          retryStrategy: (times) => {
+            const delay = Math.min(times * 1000, 10000);
+            return delay;
+          },
+        },
+        defaultJobOptions: {
+          removeOnComplete: {
+            age: 3600,
+            count: 100,
+          },
+          removeOnFail: false, // Keep failed jobs for recovery
         },
       }),
       inject: [ConfigService],

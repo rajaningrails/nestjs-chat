@@ -29,7 +29,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
         message = exceptionResponse;
       } else if (typeof exceptionResponse === 'object') {
         const res: any = exceptionResponse;
-
         message = res.message ?? message;
 
         if (Array.isArray(res.message)) {
@@ -48,7 +47,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message,
       errors,
       timestamp: new Date().toISOString(),
-      path: request.url,
+      path: request.url
     };
     
     response.status(status).send(errorResponse);

@@ -11,9 +11,8 @@ export class PartialCreateUserDto{
   @IsNotEmpty({ message: 'name is required' })
   name: string;
 
-  @IsEmail()
   @IsOptional()
-  email: string;
+  email?: string;
 
   @IsString()
   @IsOptional()

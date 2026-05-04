@@ -655,6 +655,7 @@ export class ConversationRepository implements IConversationRepository {
     limit: number,
     offset: number,
   ) {
+    let isGroup = false;
     const conversationQueryBuilder = this.conversationRepository
       .createQueryBuilder('c')
       .leftJoin(
@@ -712,7 +713,6 @@ export class ConversationRepository implements IConversationRepository {
           image: await this.s3Service.generatePresignedUrl(result.sender.image),
         };
       }
-
       if (result.group?.group_image) {
         result.group = {
           ...result.group,
@@ -723,8 +723,10 @@ export class ConversationRepository implements IConversationRepository {
       }
 
       if (result?.group_id) {
+        isGroup = true;
         result['user_details'] = { ...(result.sender ?? {}) };
       } else {
+        isGroup = false;
         result['user_details'] = { ...(result.receiver ?? {}) };
       }
 
@@ -739,10 +741,14 @@ export class ConversationRepository implements IConversationRepository {
       Promise.all(newBuffered.map(presign)),
     ]);
 
-    const merged = [...presignedBuffered, ...presignedDb].sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-    );
+    const normalize = (m: any) => ({
+      ...m,
+      created_at: m.created_at || new Date().toISOString(),
+    });
+
+    const merged = [...presignedBuffered, ...presignedDb]
+      .map(normalize)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     const adjustedTotal = totalRecords + newBuffered.length;
     const senderId = conversationInfo?.c_last_message_sender_id;
@@ -755,7 +761,7 @@ export class ConversationRepository implements IConversationRepository {
 
     return {
       message: 'Messages retrieved successfully',
-      data: merged,
+      data: isGroup ? merged?.reverse() : merged,
       hasMore: offset + limit < adjustedTotal,
       totalRecords: adjustedTotal,
       currentPage: Math.floor(offset / limit) + 1,

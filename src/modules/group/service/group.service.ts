@@ -86,6 +86,7 @@ export class GroupService {
     );
     return {
       ...groupResponse,
+      conversation_id: conversation_id,
     };
   }
 

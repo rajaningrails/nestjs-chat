@@ -27,7 +27,6 @@ export class GroupController {
 
   @Post('group/create')
   async create(@Body() createGroupDto: CreateChatGroupDto) {
-    console.log('incoming request', createGroupDto);
     const result = await this.createGroupUseCase.execute(createGroupDto);
     return result;
   }

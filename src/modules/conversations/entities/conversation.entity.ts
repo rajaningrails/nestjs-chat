@@ -48,10 +48,10 @@ export class Conversation {
   @Column({ type: 'int', nullable: true })
   last_message_receiver_id?: number;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp' })
   created_at: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at: Date;
 
   @DeleteDateColumn({ nullable: true })

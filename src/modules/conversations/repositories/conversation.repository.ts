@@ -407,7 +407,6 @@ export class ConversationRepository implements IConversationRepository {
       };
     }
   }
-
   async latestConversations(
     limit = 10,
     page = 1,
@@ -425,7 +424,6 @@ export class ConversationRepository implements IConversationRepository {
   }> {
     try {
       const offset = (page - 1) * limit;
-
       const chatConfigs: CreateChatConfigDto[] =
         await this.chatConfigRepository.findBy(String(user_id));
 
@@ -438,16 +436,21 @@ export class ConversationRepository implements IConversationRepository {
           WHEN c.last_message_sender_id = ? THEN c.last_message_receiver_id
           ELSE c.last_message_sender_id
         END as other_user_id,
+
+        -- Other user details (for 1-to-1 chats)
         u.name as other_user_name,
         u.image as other_user_profile_image,
         u.type as other_user_type,
         u.class as other_user_class,
         u.section as other_user_section,
-        cu.name as current_user_name,
-        cu.image as current_user_profile_image,
-        cu.type as current_user_type,
-        cu.class as current_user_class,
-        cu.section as current_user_section,
+
+        -- Sender details (for group chats - who sent the last message)
+        su.name as sender_name,
+        su.image as sender_profile_image,
+        su.type as sender_type,
+        su.class as sender_class,
+        su.section as sender_section,
+
         CASE 
           WHEN c.type = ? THEN 
             CASE WHEN seen.id IS NOT NULL THEN true ELSE false END
@@ -461,20 +464,27 @@ export class ConversationRepository implements IConversationRepository {
           WHEN c.type = ? THEN seen.created_at
           ELSE m.seen_at
         END as last_message_seen_at
-        FROM conversations c
-        LEFT JOIN chat_groups g ON c.group_id = g.id
-        LEFT JOIN chat_group_members gm ON g.id = gm.group_id
-        LEFT JOIN users u ON (
-          c.type = ? AND (
-            (c.last_message_sender_id = u.user_id AND u.user_id != ?) OR
-            (c.last_message_receiver_id = u.user_id AND u.user_id != ?)
-          )
+      FROM conversations c
+      LEFT JOIN chat_groups g ON c.group_id = g.id
+      LEFT JOIN chat_group_members gm ON g.id = gm.group_id
+
+      -- Join for 1-to-1: resolve the OTHER user (not current user)
+      LEFT JOIN users u ON (
+        c.type = ? AND (
+          (c.last_message_sender_id = u.user_id AND u.user_id != ?) OR
+          (c.last_message_receiver_id = u.user_id AND u.user_id != ?)
         )
-        LEFT JOIN users cu ON cu.user_id = ?
-        LEFT JOIN messages m ON c.last_message_id = m.id
-        LEFT JOIN group_message_seen seen ON (
-          seen.message_id = c.last_message_id AND seen.user_id = ?
-        )
+      )
+
+      -- Join for GROUP: resolve the last message SENDER
+      LEFT JOIN users su ON (
+        c.type = ? AND su.user_id = c.last_message_sender_id
+      )
+
+      LEFT JOIN messages m ON c.last_message_id = m.id
+      LEFT JOIN group_message_seen seen ON (
+        seen.message_id = c.last_message_id AND seen.user_id = ?
+      )
       WHERE c.school_id = ?
         AND c.deleted_at IS NULL
         AND (
@@ -485,18 +495,18 @@ export class ConversationRepository implements IConversationRepository {
     `;
 
       const params: any[] = [
-        user_id,
-        ConversationType.GROUP,
-        ConversationType.GROUP,
-        ConversationType.USER,
-        user_id,
-        user_id,
-        user_id,
-        user_id,
-        school_id,
-        user_id,
-        user_id,
-        user_id,
+        user_id, // other_user_id CASE
+        ConversationType.GROUP, // is_seen CASE
+        ConversationType.GROUP, // last_message_seen_at CASE
+        ConversationType.USER, // JOIN users u — only for USER type
+        user_id, // u.user_id != ? (sender side)
+        user_id, // u.user_id != ? (receiver side)
+        ConversationType.GROUP, // JOIN users su — only for GROUP type
+        user_id, // seen.user_id
+        school_id, // WHERE school_id
+        user_id, // sender_id
+        user_id, // receiver_id
+        user_id, // group member
       ];
 
       if (search && search.trim() !== '') {
@@ -519,19 +529,13 @@ export class ConversationRepository implements IConversationRepository {
       SELECT COUNT(DISTINCT subquery.id) as total
       FROM (${baseQuery}) as subquery
     `;
-
       const countResult = await this.conversationRepository.query(
         countQuery,
         params,
       );
       const totalRecords = parseInt(countResult[0]?.total || '0');
 
-      const dataQuery = `
-      ${baseQuery}
-      ORDER BY c.updated_at DESC
-      LIMIT ? OFFSET ?
-    `;
-
+      const dataQuery = `${baseQuery} ORDER BY c.updated_at DESC LIMIT ? OFFSET ?`;
       const conversations = await this.conversationRepository.query(dataQuery, [
         ...params,
         limit,
@@ -544,23 +548,27 @@ export class ConversationRepository implements IConversationRepository {
       const processedConversations = await Promise.all(
         conversations.map(async (conv: any) => {
           const isDisabled = !isConversationEnabled(conv, chatConfigs);
+          const isGroup = conv.type === ConversationType.GROUP;
 
-          const [userImage, groupImage, isOnline, currentUserImage] = await Promise.all([
-            conv.other_user_profile_image
-              ? this.s3Service.generatePresignedUrl(
-                  conv.other_user_profile_image,
-                )
-              : Promise.resolve(null),
+          const [userImage, groupImage, isOnline] = await Promise.all([
+            // For 1-to-1: other user image | For group: sender image
+            isGroup
+              ? conv.sender_profile_image
+                ? this.s3Service.generatePresignedUrl(conv.sender_profile_image)
+                : Promise.resolve(null)
+              : conv.other_user_profile_image
+                ? this.s3Service.generatePresignedUrl(
+                    conv.other_user_profile_image,
+                  )
+                : Promise.resolve(null),
+
             conv.group_image
               ? this.s3Service.generatePresignedUrl(conv.group_image)
               : Promise.resolve(null),
-            conv.group_id
+
+            isGroup
               ? Promise.resolve(false)
               : this.socketService.isUserOnline(conv?.other_user_id),
-            conv.group_id && conv.current_user_profile_image ?
-              this.s3Service.generatePresignedUrl(
-                conv.current_user_profile_image
-              ): Promise.resolve(null)
           ]);
 
           return {
@@ -576,10 +584,9 @@ export class ConversationRepository implements IConversationRepository {
             last_message_id: conv.last_message_id,
             last_message: conv.last_message,
             last_message_sender_id: conv.last_message_sender_id,
-            last_message_receiver_type:
-              conv.type === ConversationType.GROUP
-                ? 'group'
-                : conv.other_user_type,
+            last_message_receiver_type: isGroup
+              ? 'group'
+              : conv.other_user_type,
             last_message_seen_at: conv.last_message_seen_at,
             last_message_date: conv.last_message_created_at,
             is_only_teachers_group: conv.group_type,
@@ -594,29 +601,24 @@ export class ConversationRepository implements IConversationRepository {
             deleted_at: conv.last_message_delete_at,
             deletedMessageFlag: conv.last_message_delete_at ? 1 : 0,
 
-            user_id:
-              conv.type === ConversationType.GROUP
-                ? user_id
-                : (conv.other_user_id ?? null),
+            user_id: isGroup ? user_id : (conv.other_user_id ?? null),
 
-            user_details:
-              conv.type === ConversationType.GROUP
-                ? {
-                    id: String(user_id),
-                    name: conv.current_user_name, 
-                    image: currentUserImage, 
-                    class: conv.current_user_class,
-                    section: conv.current_user_section,
-                  }
-                : conv.other_user_id
-                  ? {
-                      id: conv.other_user_id,
-                      name: conv.other_user_name,
-                      image: userImage,
-                      class: conv.other_user_class,
-                      section: conv.other_user_section,
-                    }
-                  : null,
+            // ✅ 1-to-1: other user details | Group: last message sender details
+            user_details: isGroup
+              ? {
+                  id: conv.last_message_sender_id,
+                  name: conv.sender_name,
+                  image: userImage,
+                  class: conv.sender_class,
+                  section: conv.sender_section,
+                }
+              : {
+                  id: conv.other_user_id,
+                  name: conv.other_user_name,
+                  image: userImage,
+                  class: conv.other_user_class,
+                  section: conv.other_user_section,
+                },
           };
         }),
       );
@@ -655,7 +657,6 @@ export class ConversationRepository implements IConversationRepository {
     limit: number,
     offset: number,
   ) {
-    let isGroup = false;
     const conversationQueryBuilder = this.conversationRepository
       .createQueryBuilder('c')
       .leftJoin(
@@ -693,10 +694,10 @@ export class ConversationRepository implements IConversationRepository {
         }
       })
       .filter((m) => m !== null);
-
     const dbIds = new Set(dbMessages.map((m) => m.id?.toString()));
-
     const newBuffered = buffered.filter((m) => !dbIds.has(m.id?.toString()));
+
+    const isGroup = !!conversationInfo?.c_group_id;
 
     const presign = async (msg: any) => {
       const result = { ...msg };
@@ -713,6 +714,7 @@ export class ConversationRepository implements IConversationRepository {
           image: await this.s3Service.generatePresignedUrl(result.sender.image),
         };
       }
+
       if (result.group?.group_image) {
         result.group = {
           ...result.group,
@@ -722,17 +724,10 @@ export class ConversationRepository implements IConversationRepository {
         };
       }
 
-      if (result?.group_id) {
-        isGroup = true;
-        result['user_details'] = { ...(result.sender ?? {}) };
-      } else {
-        isGroup = false;
-        result['user_details'] = { ...(result.receiver ?? {}) };
-      }
+      result['user_details'] = { ...(result.sender ?? {}) };
 
       delete result.sender;
       delete result.receiver;
-
       return result;
     };
 
@@ -748,9 +743,13 @@ export class ConversationRepository implements IConversationRepository {
 
     const merged = [...presignedBuffered, ...presignedDb]
       .map(normalize)
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      .sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      );
 
     const adjustedTotal = totalRecords + newBuffered.length;
+
     const senderId = conversationInfo?.c_last_message_sender_id;
     const chatConfigs =
       senderId != null && !isNaN(Number(senderId))
@@ -761,7 +760,8 @@ export class ConversationRepository implements IConversationRepository {
 
     return {
       message: 'Messages retrieved successfully',
-      data: isGroup ? merged?.reverse() : merged,
+      // data: isGroup ? [...merged].reverse() : merged,
+      data: merged,
       hasMore: offset + limit < adjustedTotal,
       totalRecords: adjustedTotal,
       currentPage: Math.floor(offset / limit) + 1,
@@ -772,7 +772,6 @@ export class ConversationRepository implements IConversationRepository {
       is_disabled: isDisabled,
     };
   }
-
   async deleteAllMessages(request: DeleteConversationDto) {
     const conversationExists = await this.findById(request.conversationID!);
 

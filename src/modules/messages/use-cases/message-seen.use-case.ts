@@ -26,6 +26,7 @@ export class MessageSeenUseCase {
       message_seen_update_receiver_id: request.seen_update_receiver_id,
       conversation_id: request.conversation_id
     }
+    console.log(request,'test', Number(request.group_id));
     if (Number(request.group_id)) {
       await this.messageService.groupChatMessageSeen(request);
       await this.socketService.emitToGroupMembers(request?.group_id!, 'message-seen', response)

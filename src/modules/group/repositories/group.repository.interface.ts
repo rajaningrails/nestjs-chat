@@ -44,7 +44,7 @@ export interface IGroupRepository {
   create({
     created_by,
     group_name,
-    group_image,
+    image,
     school_id,
     staffDetails,
     studentDetails,

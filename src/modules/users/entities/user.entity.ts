@@ -42,10 +42,10 @@ export class User {
   @Column({type:"text", nullable: true})
   section: string;
   
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp' })
   created_at: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at: Date;
 
   @OneToMany(() => ChatGroup, (group) => group.creator)

@@ -45,4 +45,12 @@ export class SendMessageDto {
   @IsString({ each: true })
   @IsNotEmpty()
   attachments?: string[];
+
+  @IsDate()
+  @IsOptional()
+  created_at?: Date;
+
+  @IsDate()
+  @IsOptional()
+  updated_at?: Date;
 }

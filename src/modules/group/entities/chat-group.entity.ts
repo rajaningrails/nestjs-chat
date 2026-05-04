@@ -36,10 +36,10 @@ export class ChatGroup {
   @Column({ type: 'int' })
   created_by: number;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp' })
   created_at: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at: Date;
 
   @DeleteDateColumn({ nullable: true })

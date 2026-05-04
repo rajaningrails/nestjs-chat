@@ -53,6 +53,8 @@ export class GroupService {
       group_id: groupResponse?.id,
       school_id: payload?.group?.school_id,
       id: message_id,
+      created_at: new Date(),
+      updated_at: new Date(),
     });
     await this.conversationRepository.updateLastMessageSafe({
       conversationId: conversation_id,
@@ -84,6 +86,7 @@ export class GroupService {
     );
     return {
       ...groupResponse,
+      conversation_id: conversation_id,
     };
   }
 
@@ -113,7 +116,6 @@ export class GroupService {
       group_id: number;
     }[],
   ) {
-    console.log('started-group-message-seen', payload);
     return await this.groupRepository.groupMessageSeenBatch(payload);
   }
 

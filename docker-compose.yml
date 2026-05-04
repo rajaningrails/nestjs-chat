@@ -8,24 +8,6 @@ services:
     ports:
       - "3000:3000"
       - "4000:4000"
-    environment:
-      - NODE_ENV=production
-      - DATABASE_HOST=${{MySQL.MYSQLHOST}}
-      - DATABASE_PORT=${{MySQL.MYSQLPORT}}
-      - DATABASE_USERNAME=${{MySQL.MYSQLUSER}}
-      - DATABASE_PASSWORD=${{MySQL.MYSQLPASSWORD}}
-      - DATABASE_NAME=${{MySQL.MYSQLDATABASE}}
-      - REDIS_HOST=${{Redis.REDISHOST}}
-      - REDIS_PORT=${{Redis.REDISPORT}}
-      - AWS_KEY=${{AWS.AWSKEY}}
-      - AWS_SECRET=${{AWS.AWSSECRET}}
-      - AWS_REGION=${{AWS.AWSREGION}}
-      - AWS_BUCKET=${{AWS.AWSBUCKET}}
-    depends_on:
-      - db
-      - redis
-    volumes:
-      - ./logs:/app/logs 
     restart: unless-stopped
 
   db:

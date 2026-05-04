@@ -48,7 +48,7 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
   await app.register(fastifyStatic, {
-    root: join(__dirname, '..', 'src', 'public'),
+    root: join(process.cwd(), 'public'),
     prefix: '/static/',
     decorateReply: true,
   });

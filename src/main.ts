@@ -50,7 +50,8 @@ async function bootstrap() {
   await app.register(fastifyStatic, {
     root: join(process.cwd(), 'public'),
     prefix: '/static/',
-    decorateReply: true,
+    index: false,
+    list: false,
   });
   await app.listen(port, '0.0.0.0');
 

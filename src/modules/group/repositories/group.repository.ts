@@ -87,12 +87,12 @@ export class GroupRepository implements IGroupRepository {
   }
 
   async create(data: CreateChatGroupDto): Promise<ChatGroup> {
-    const { school_id, group_name, created_by, group_image } = data;
+    const { school_id, group_name, created_by, image } = data;
 
     const group = this.groupRepo.create({
       school_id,
       group_name: group_name.trim(),
-      group_image,
+      group_image: image,
       created_by,
     });
 

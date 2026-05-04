@@ -58,23 +58,11 @@ export class CreateGroupUseCase {
       request.created_by,
       group_type,
     );
-
-    const [groupImage, ...memberImages] = await Promise.all([
-      request.group_image
-        ? this.s3Service.generatePresignedUrl(request.group_image)
-        : Promise.resolve(null),
-      ...allMembers.map((m) =>
-        m.image
-          ? this.s3Service.generatePresignedUrl(m.image)
-          : Promise.resolve(null),
-      ),
-    ]);
-
     const users: CreateUserDto[] = allMembers.map((p, index) => ({
       user_id: p.id,
       school_id: request.school_id,
       type: p.type,
-      image: memberImages[index]!,
+      image: p.image!,
       name: p.name,
     }));
 
@@ -82,7 +70,7 @@ export class CreateGroupUseCase {
       users,
       group: {
         created_by: request.created_by,
-        group_image: groupImage!,
+        image: request?.image?.[0],
         group_name: request.group_name,
         school_id: request.school_id,
       },

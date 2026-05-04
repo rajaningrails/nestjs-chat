@@ -33,9 +33,8 @@ export class CreateChatGroupDto {
   @IsNotEmpty({ message: 'group_name is required' })
   group_name: string;
 
-  @IsString()
   @IsOptional()
-  group_image: string;
+  image?: any;
 
   @IsNumberString()
   @IsNotEmpty({ message: 'created by is required' })

@@ -53,15 +53,33 @@ src/
 | `chat_configs` | Config settings |
 
 ## Env Vars (see `.env.example`)
-`DATABASE_*`, `REDIS_HOST/PORT`, `PORT` (default 4001), `NODE_ENV`, `SECRET`, `MESSAGE_BATCH_SIZE`, `MESSAGE_BATCH_TIMEOUT`, `MAX_CONNECTIONS_PER_WORKER`
+`DATABASE_*`, `REDIS_HOST/PORT`, `REDIS_URL`, `PORT` (default 4001), `NODE_ENV`, `SECRET` (required — no fallback), `ALLOWED_ORIGINS` (comma-separated), `MESSAGE_BATCH_SIZE`, `MESSAGE_BATCH_TIMEOUT`, `MAX_CONNECTIONS_PER_WORKER`, `AWS_KEY`, `AWS_SECRET`, `AWS_ENDPOINT`, `AWS_BUCKET`
 
 ## Key Conventions
 - Each module follows: `controller → service → repository → use-cases → dto → entities`
 - DTOs use `class-validator` + `class-transformer`; global pipe has `whitelist: true, transform: true`
-- Entities live in `src/**/*.entity.ts` — TypeORM auto-discovers them
-- Migrations path: `src/infrastructure/database/migrations/` (currently unused; sync mode active)
+- Entities live in `src/**/*.entity.ts` — TypeORM auto-discovers them; `synchronize` is off in production
+- Migrations path: `src/infrastructure/database/migrations/`
 - Logging: Winston via `nest-winston`; logs written to `logs/`
 - Port: `process.env.PORT ?? 4001`
+
+## Auth & Security
+- **HTTP auth**: Global `HmacAuthGuard` — validates `x-signature`, `x-timestamp`, `x-app-id`, `x-app-user-id` headers. Signature = `HMAC-SHA256(secret, "<timestamp>:<METHOD>:<path>")`. Mark public endpoints with `@Public()`.
+- **Socket auth**: `socketAuthMiddleware` — same HMAC scheme, signs `"<timestamp>:<sender_id>"`. Passes validated `userId` via `socket.data.userId`.
+- **CORS**: Whitelist via `ALLOWED_ORIGINS` env var (comma-separated). Falls back to allow-all in dev.
+- **Security headers**: `@fastify/helmet` registered in `main.ts` (CSP enabled in production only).
+- **Rate limiting**: `ChatThrottlerGuard` keys on `x-app-id`+`x-app-user-id` (HMAC-validated, not spoofable); falls back to IP for `@Public()` routes.
+
+## Socket.IO Scaling
+- `@socket.io/redis-adapter` wired in `MessageGateway.afterInit()` via two `ioredis` duplicate connections. Required for PM2 cluster mode (4 instances).
+- Gateway emits a **single** `newMessage` event containing both `message` and `conversation` fields. Clients must handle `newMessage` (not the old `message` + `latestMessageIndividual` pair).
+
+## S3 Presigned URLs
+- `S3PresignedUrlService.generatePresignedUrl()` caches results in Redis with TTL = 90% of the expiry time. Cache key: `s3:presign:<key>:<expiryTime>`. Redis failures are non-fatal (falls through to fresh presign).
+
+## Pagination
+- Hard cap of 100 records per page enforced in `MessageRepository` (`MAX_PAGE_SIZE = 100`). Applies to `findByConversation`, `getConversationMessages`, and `searchMessages`.
+- `cleanupOldMessages` deletes in batches of 500 to avoid table locks.
 
 ## Scripts
 ```

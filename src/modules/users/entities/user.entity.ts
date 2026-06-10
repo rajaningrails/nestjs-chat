@@ -13,7 +13,7 @@ import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
 
 @Entity('users')
 @Index('IDX_USER_USER_ID', ['user_id'])
-@Unique('UQ_USER_SCHOOL_USER', ['user_id'])
+@Unique('UQ_USER_SCHOOL_USER', ['school_id', 'user_id'])
 export class User {
   @PrimaryGeneratedColumn()
   id: number;

@@ -1,22 +1,35 @@
-import { IsEnum, IsInt, IsNotEmpty, IsNumberString, IsOptional, IsString } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUrl,
+  MaxLength,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { UserType } from './user-type.enum';
 
 export class SyncUserDto {
-  @IsNumberString()
+  @Type(() => Number)
+  @IsInt()
   @IsNotEmpty()
   app_id: number;
 
-  @IsNumberString()
+  @Type(() => Number)
+  @IsInt()
   @IsNotEmpty()
   app_user_id: number;
 
-  @IsString()
   @IsOptional()
-  name: string;
+  @IsString()
+  @MaxLength(255)
+  name?: string;
 
-  @IsString()
   @IsOptional()
-  image: string;
+  @IsUrl()
+  @MaxLength(2048)
+  image?: string;
 
   @IsEnum(UserType)
   @IsNotEmpty()
@@ -24,9 +37,11 @@ export class SyncUserDto {
 
   @IsOptional()
   @IsString()
-  class: string;
+  @MaxLength(100)
+  class?: string;
 
   @IsOptional()
   @IsString()
-  section: string;
+  @MaxLength(100)
+  section?: string;
 }

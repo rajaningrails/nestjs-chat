@@ -8,6 +8,7 @@ import {
   Param,
 } from '@nestjs/common';
 import { DLQRecoveryService } from './dlq-recovery.service';
+import { Public } from 'src/common/decorators/public.decorator';
 
 @Controller('admin/dlq')
 export class DLQController {
@@ -124,6 +125,7 @@ export class DLQController {
   }
 
   @Get('health')
+  @Public()
   async healthCheck() {
     const stats = await this.dlqService.getDLQStats();
 

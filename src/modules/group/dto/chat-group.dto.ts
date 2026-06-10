@@ -1,78 +1,57 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsEmail, IsInt, IsNotEmpty, IsNumber, IsNumberString, IsOptional, IsPositive, IsString, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsPositive,
+  IsString,
+  IsUrl,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
 import { UserType } from 'src/modules/users/dto/user-type.enum';
 
-export class PartialCreateUserDto{
-  @IsNumberString()
+export class PartialCreateUserDto {
+  @Type(() => Number)
+  @IsInt()
   @IsNotEmpty({ message: 'users id is required' })
   id: number;
 
   @IsString()
   @IsNotEmpty({ message: 'name is required' })
+  @MaxLength(255)
   name: string;
 
   @IsOptional()
-  email?: string;
+  @IsUrl()
+  @MaxLength(2048)
+  image?: string;
 
-  @IsString()
   @IsOptional()
-  image: string;
-
-  @IsString()
-  @IsOptional()
-  type: UserType;
+  @IsEnum(UserType)
+  type?: UserType;
 }
 
 export class CreateChatGroupDto {
-  @IsNumberString()
-  @IsNotEmpty({ message: 'school_id is required' })
-  school_id: number;
-
-  @IsString()
-  @IsNotEmpty({ message: 'group_name is required' })
-  group_name: string;
-
-  @IsOptional()
-  image?: any;
-
-  @IsNumberString()
-  @IsNotEmpty({ message: 'created by is required' })
-  created_by: number;
-
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => PartialCreateUserDto)
-  @IsOptional()
-  studentDetails?: PartialCreateUserDto[];
-
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => PartialCreateUserDto)
-  @IsOptional()
-  staffDetails?: PartialCreateUserDto[];
-}
-
-
-export class UpdateGroupDto {
-  @IsNumber()
-  @IsNotEmpty({ message: 'group_id is required' })
-  group_id: number;
-
+  @Type(() => Number)
   @IsInt()
   @IsNotEmpty({ message: 'school_id is required' })
   school_id: number;
 
   @IsString()
   @IsNotEmpty({ message: 'group_name is required' })
+  @MaxLength(255)
   group_name: string;
 
-  @IsNumber()
+  @IsOptional()
+  image?: any;
+
+  @Type(() => Number)
+  @IsInt()
   @IsNotEmpty({ message: 'created by is required' })
   created_by: number;
-
-  @IsString()
-  @IsOptional()
-  group_image: string;
 
   @IsArray()
   @ValidateNested({ each: true })
@@ -87,6 +66,44 @@ export class UpdateGroupDto {
   staffDetails?: PartialCreateUserDto[];
 }
 
+export class UpdateGroupDto {
+  @Type(() => Number)
+  @IsInt()
+  @IsNotEmpty({ message: 'group_id is required' })
+  group_id: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @IsNotEmpty({ message: 'school_id is required' })
+  school_id: number;
+
+  @IsString()
+  @IsNotEmpty({ message: 'group_name is required' })
+  @MaxLength(255)
+  group_name: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @IsNotEmpty({ message: 'created by is required' })
+  created_by: number;
+
+  @IsOptional()
+  @IsUrl()
+  @MaxLength(2048)
+  group_image?: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PartialCreateUserDto)
+  @IsOptional()
+  studentDetails?: PartialCreateUserDto[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PartialCreateUserDto)
+  @IsOptional()
+  staffDetails?: PartialCreateUserDto[];
+}
 
 export class GetGroupDto {
   @Type(() => Number)
@@ -96,11 +113,13 @@ export class GetGroupDto {
 }
 
 export class GetGroupNameDto {
-  @IsNumberString()
+  @Type(() => Number)
+  @IsInt()
   @IsNotEmpty({ message: 'school id is required' })
   school_id: number;
 
-  @IsNumberString()
+  @Type(() => Number)
+  @IsInt()
   @IsNotEmpty({ message: 'user id is required' })
   user_id: number;
 }

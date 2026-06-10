@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { HmacAuthGuard } from './common/guard/hmac-auth.guard';
 import { WinstonModule } from 'nest-winston';
 import { DatabaseModule } from './infrastructure/database/database.module';
 import { databaseConfig } from './infrastructure/config/database.config';
@@ -18,9 +20,8 @@ import { ThrottleModule } from './common/throttler/throttler.module';
 import { TasksModule } from './infrastructure/job/task.module';
 import { GroupModule } from './modules/group/group.module';
 import { DLQModule } from './modules/dlq/dlq.module';
-import { S3Module } from './infrastructure/aws/aws.module';
-import { DebugController } from './modules/debug/debug.controller';
 import { ChatConfigModule } from './modules/chat_configs/chat-configs.module';
+import { DebugModule } from './modules/debug/debug.module';
 
 @Module({
   imports: [
@@ -52,15 +53,16 @@ import { ChatConfigModule } from './modules/chat_configs/chat-configs.module';
     ConversationsModule,
     MessageModule,
     GroupModule,
-    ChatConfigModule
+    ChatConfigModule,
+    ...(process.env.NODE_ENV !== 'production' ? [DebugModule] : []),
   ],
-  controllers: [AppController, DebugController],
+  controllers: [AppController],
   providers: [
     AppService,
-    // {
-    //   provide: APP_GUARD,
-    //   useClass: HmacAuthGuard, // for authentication of incoming requests
-    // },
+    {
+      provide: APP_GUARD,
+      useClass: HmacAuthGuard,
+    },
   ],
 })
 export class AppModule {}

@@ -5,6 +5,8 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUrl,
+  MaxLength,
 } from 'class-validator';
 import { IsAdmin, UserType } from './user-type.enum';
 
@@ -18,17 +20,23 @@ export class CreateUserDto {
   user_id: number;
 
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
   name: string;
 
-  @IsString()
-  image: string;
+  @IsOptional()
+  @IsUrl()
+  @MaxLength(2048)
+  image?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   class?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   section?: string;
 
   @IsEnum(UserType)

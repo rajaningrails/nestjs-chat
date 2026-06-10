@@ -19,11 +19,13 @@ import { GroupModule } from '../group/group.module';
 import { ConversationsModule } from '../conversations/conversations.module';
 import { S3Module } from 'src/infrastructure/aws/aws.module';
 import { ChatConfigModule } from '../chat_configs/chat-configs.module';
+import { RedisModule } from 'src/infrastructure/redis/redis.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Message, User, Conversation]),
     messageQueueConfig,
+    RedisModule,
     forwardRef(() => ConversationsModule),
     forwardRef(() => GroupModule),
     UsersModule,

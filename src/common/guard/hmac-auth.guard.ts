@@ -2,6 +2,7 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
+  InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -10,47 +11,64 @@ import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
 @Injectable()
 export class HmacAuthGuard implements CanActivate {
-  private readonly secret = process.env.SECRET ?? 'vedachatappsecret';
-  constructor(private reflector: Reflector) {}
+  private readonly secret: string;
+
+  constructor(private reflector: Reflector) {
+    const secret = process.env.SECRET;
+    if (!secret) {
+      throw new InternalServerErrorException(
+        'SECRET environment variable is not set',
+      );
+    }
+    this.secret = secret;
+  }
 
   canActivate(context: ExecutionContext): boolean {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
+    if (isPublic) return true;
 
-    if (isPublic) {
-      return true;
-    }
     const request = context.switchToHttp().getRequest<Request>();
-    const headers = request.headers as any;
+    const headers = request.headers as unknown as Record<string, string>;
 
     const signature = headers['x-signature'];
     const timestamp = headers['x-timestamp'];
     const schoolId = headers['x-app-id'];
     const userId = headers['x-app-user-id'];
+    const method = (request as any).method as string;
+    const url = (request as any).url as string;
 
     if (!signature || !timestamp || !schoolId || !userId) {
       throw new UnauthorizedException('Missing auth headers');
     }
 
-    const now = Date.now();
-    const requestAgeMs = Math.abs(now - Number(timestamp));
-    if (requestAgeMs > 5 * 60 * 1000) {
-      throw new UnauthorizedException('Request expired');
+    const tsNum = Number(timestamp);
+    if (!Number.isFinite(tsNum) || Math.abs(Date.now() - tsNum) > 5 * 60 * 1000) {
+      throw new UnauthorizedException('Request expired or invalid timestamp');
     }
 
+    // Sign timestamp + method + path to prevent cross-endpoint replay
+    const payload = `${timestamp}:${method.toUpperCase()}:${url.split('?')[0]}`;
     const expected = crypto
       .createHmac('sha256', this.secret)
-      .update(timestamp)
+      .update(payload)
       .digest('hex');
 
-    const signatureBuffer = Buffer.from(signature);
-    const expectedBuffer = Buffer.from(expected);
+    let sigBuf: Buffer;
+    let expBuf: Buffer;
+    try {
+      sigBuf = Buffer.from(signature, 'hex');
+      expBuf = Buffer.from(expected, 'hex');
+    } catch {
+      throw new UnauthorizedException('Invalid signature format');
+    }
 
     if (
-      signatureBuffer.length !== expectedBuffer.length ||
-      !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)
+      sigBuf.length === 0 ||
+      sigBuf.length !== expBuf.length ||
+      !crypto.timingSafeEqual(sigBuf, expBuf)
     ) {
       throw new UnauthorizedException('Invalid signature');
     }

@@ -33,13 +33,15 @@ export class UpdateGroupUseCase {
     const missingUsers = members.filter((m) => !existingIds.has(m.id));
 
     if (missingUsers.length > 0) {
-      const usersToCreate: CreateUserDto[] = missingUsers.map((m) => ({
-        user_id: m.id,
-        school_id,
-        type: m.type,
-        image: m.image,
-        name: m.name,
-      }));
+      const usersToCreate: CreateUserDto[] = missingUsers
+        .filter((m) => m.type !== undefined)
+        .map((m) => ({
+          user_id: m.id,
+          school_id,
+          type: m.type!,
+          image: m.image,
+          name: m.name,
+        }));
       await this.userRepository.upsertUsers(usersToCreate);
     }
   }

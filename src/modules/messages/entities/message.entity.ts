@@ -22,6 +22,7 @@ import { GroupMessageSeen } from 'src/modules/group/entities/chat-group-message-
 @Index('idx_created_at', ['created_at'])
 @Index('idx_conversation_created', ['conversation_id', 'created_at'])
 @Index('idx_seen_at', ['seen_at'])
+@Index('idx_receiver_id', ['receiver_id'])
 export class Message {
   @PrimaryColumn({ type: 'bigint', unsigned: true })
   id: number;

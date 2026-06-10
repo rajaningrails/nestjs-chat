@@ -9,6 +9,7 @@ import { map } from 'rxjs/operators';
 import { FastifyReply } from 'fastify';
 
 export interface ApiResponse<T> {
+  success: boolean;
   statusCode: number;
   message: string;
   data: T;
@@ -31,7 +32,6 @@ export class TransformInterceptor<T>
         const statusCode = response.statusCode;
         return {
           success: statusCode >= 200 && statusCode < 300,
-          status: statusCode >= 200 && statusCode < 300,
           statusCode,
           message: 'Request processed successfully',
           data,

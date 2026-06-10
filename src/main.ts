@@ -11,6 +11,7 @@ import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { ValidationPipe } from '@nestjs/common';
 import { join } from 'path';
 import fastifyStatic from '@fastify/static';
+
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
@@ -22,8 +23,19 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 4001);
+  const nodeEnv = configService.get<string>('NODE_ENV', 'development');
+  const allowedOrigins = configService
+    .get<string>('ALLOWED_ORIGINS', '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
 
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
+
+  // Security headers
+  await app.register(require('@fastify/helmet'), {
+    contentSecurityPolicy: nodeEnv === 'production',
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -37,7 +49,15 @@ async function bootstrap() {
   app.useGlobalInterceptors(new TransformInterceptor());
 
   await app.register(require('@fastify/cors'), {
-    origin: true,
+    origin: allowedOrigins.length > 0
+      ? (origin: string, cb: (err: Error | null, allow: boolean) => void) => {
+          if (!origin || allowedOrigins.includes(origin)) {
+            cb(null, true);
+          } else {
+            cb(new Error(`Origin ${origin} not allowed`), false);
+          }
+        }
+      : true, // dev fallback: allow all
     credentials: true,
   });
 

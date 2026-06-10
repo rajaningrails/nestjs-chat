@@ -10,9 +10,11 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
+import { createAdapter } from '@socket.io/redis-adapter';
 import { SocketService } from 'src/common/services/socket/socket.service';
 import { PresenceService } from 'src/common/services/socket/presence.service';
 import { TypingService } from 'src/common/services/socket/typing.service';
+import { RedisService } from 'src/common/services/redis.service';
 import { MessageDto } from '../dto/message.dto';
 import { User } from 'src/modules/users/entities/user.entity';
 import { Conversation } from 'src/modules/conversations/entities/conversation.entity';
@@ -20,15 +22,26 @@ import { S3PresignedUrlService } from 'src/common/services/aws.service';
 import { ChatGroup } from 'src/modules/group/entities/chat-group.entity';
 import { SeenMessageDto } from '../dto/seen-message.dto';
 import { MessageSeenUseCase } from '../use-cases/message-seen.use-case';
+import { socketAuthMiddleware } from 'src/infrastructure/socket/handlers/socket-auth.middleware';
 
 interface AuthenticatedSocket extends Socket {
   userId?: number;
   schoolId?: number;
 }
 
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+  : [];
+
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: (origin: string, callback: (err: Error | null, allow?: boolean) => void) => {
+      if (!origin || ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   },
   transports: ['websocket', 'polling'],
@@ -50,22 +63,31 @@ export class MessageGateway
     private readonly presenceService: PresenceService,
     private readonly s3Service: S3PresignedUrlService,
     private readonly seenMessageUseCase: MessageSeenUseCase,
+    private readonly redisService: RedisService,
   ) {}
 
   async afterInit(server: Server) {
+    // Wire Socket.IO Redis adapter so all PM2 instances share events
+    const pubClient = this.redisService.getClient().duplicate();
+    const subClient = pubClient.duplicate();
+    server.adapter(createAdapter(pubClient, subClient));
+
+    // Attach auth middleware to all incoming connections
+    server.use(socketAuthMiddleware);
+
     this.socketService.setServer(server);
     await this.socketService.clearAllSocketMappings();
   }
 
   async handleConnection(client: AuthenticatedSocket) {
     try {
-      let userId: string | number = client.handshake.query?.sender_id as string;
+      // userId is set by socketAuthMiddleware after HMAC validation
+      const userId = client.data?.userId as number | undefined;
       if (!userId) {
-        this.logger.warn(`Connection rejected: No user ID`, client.handshake);
+        this.logger.warn('Connection rejected: unauthenticated socket', client.id);
         client.disconnect();
         return;
       }
-      userId = Number(userId);
       client.userId = userId;
 
       const success = await this.socketService.addUserSocket(userId, client.id);
@@ -319,106 +341,83 @@ export class MessageGateway
     group_detail: ChatGroup | null,
   ) {
     try {
-      const presignedUrls = await Promise.all([
-        this.s3Service.generatePresignedUrls(message.attachments!),
-        this.s3Service.generatePresignedUrl(sender_user_details.image!),
-        this.s3Service.generatePresignedUrl(receiver_user_details?.image!),
+      const isOnline = message?.receiver_id
+        ? await this.socketService.isUserOnline(message.receiver_id)
+        : false;
+
+      const [attachments, senderImage, receiverImage] = await Promise.all([
+        message.attachments?.length
+          ? this.s3Service.generatePresignedUrls(message.attachments)
+          : Promise.resolve([]),
+        sender_user_details.image
+          ? this.s3Service.generatePresignedUrl(sender_user_details.image)
+          : Promise.resolve(null),
+        receiver_user_details?.image
+          ? this.s3Service.generatePresignedUrl(receiver_user_details.image)
+          : Promise.resolve(null),
       ]);
-      const messageData = {
-        status: true,
-        message: 'Message sent successfully',
-        data: {
+
+      const senderDetails = {
+        id: sender_user_details.user_id.toString(),
+        name: sender_user_details.name,
+        image: senderImage,
+        level: sender_user_details.type,
+      };
+
+      // Single combined event — clients read both message + conversation preview from one payload
+      const payload = {
+        message: {
           id: message.id,
-          message: message?.message || '',
-          attachments: presignedUrls?.[0] ?? [],
+          message: message.message ?? '',
+          attachments,
           conversation_id: message.conversation_id,
           seen_at: null,
-          delete_at: null,
-          not_show: 0,
           sender_id: message.sender_id,
           school_id: message.school_id,
           receiver_id: message.receiver_id,
           group_id: message.group_id,
-          chat_reply_id: null,
           created_at: new Date(),
           updated_at: new Date(),
-          receiver_image: presignedUrls?.[2],
-          isOnline: message?.receiver_id
-            ? this.socketService.isUserOnline(message.receiver_id!)
-            : false,
-          isGroupMessage: message?.group_id ? true : false,
-          user_details: {
-            id: sender_user_details?.user_id?.toString(),
-            name: sender_user_details?.name,
-            image: presignedUrls?.[1],
-            level: sender_user_details?.type,
-          },
+          receiver_image: receiverImage,
+          isOnline,
+          isGroupMessage: !!message.group_id,
+          user_details: senderDetails,
+        },
+        conversation: {
+          id: message.conversation_id,
+          user_id: message.receiver_id,
+          school_id: message.school_id,
+          sender_id: message.sender_id,
+          receiver_id: message.receiver_id,
+          type: conversation.type,
+          group_id: message.group_id,
+          last_message_id: message.id,
+          last_message_seen_at: null,
+          last_message_sender_id: message.sender_id,
+          last_message_date: new Date(),
+          last_message: message.message,
+          is_only_teachers_group: conversation.group_type,
+          last_message_receiver_type: receiver_user_details?.type,
+          attachments,
+          isOnline,
+          group_name: group_detail?.group_name,
+          isGroupMessage: !!message.group_id,
+          group_image: group_detail?.group_image,
+          user_details: senderDetails,
         },
       };
 
-      const latestMessagePayload = {
-        id: message?.conversation_id,
-        user_id: message?.receiver_id,
-        school_id: message?.school_id,
-        sender_id: message?.sender_id,
-        receiver_id: message?.receiver_id,
-        type: conversation.type,
-        group_id: message.group_id,
-        created_at: new Date(),
-        updated_at: new Date(),
-        last_message_id: message?.id,
-        last_message_seen_at: null,
-        last_message_sender_id: message?.sender_id,
-        last_message_date: new Date(),
-        last_message: message?.message,
-        is_only_teachers_group: conversation.group_type,
-        last_message_receiver_type: receiver_user_details?.type,
-        attachments: presignedUrls?.[0] ?? [],
-        isOnline: message?.receiver_id
-          ? this.socketService.isUserOnline(message.receiver_id!)
-          : false,
-        is_online: message?.receiver_id
-          ? this.socketService.isUserOnline(message.receiver_id!)
-          : false,
-        group_name: group_detail?.group_name,
-        isGroupMessage: message?.group_id ? true : false,
-        group_image: group_detail?.group_image,
-        user_details: {
-          id: sender_user_details?.user_id?.toString(),
-          name: sender_user_details?.name,
-          image: presignedUrls?.[1],
-          level: sender_user_details?.type,
-        },
-      };
-
-      if (message?.group_id) {
-        await this.socketService.emitToGroupMembers(
-          message?.group_id,
-          'message',
-          messageData,
-        );
-        await this.socketService.emitToGroupMembers(
-          message?.group_id,
-          'latestMessageIndividual',
-          latestMessagePayload,
-        );
-      } else if (message?.receiver_id) {
+      if (message.group_id) {
+        await this.socketService.emitToGroupMembers(message.group_id, 'newMessage', payload);
+      } else if (message.receiver_id) {
         await this.socketService.emitToUsers(
-          [message.sender_id, message?.receiver_id],
-          'message',
-          messageData,
-        );
-        await this.socketService.emitToUsers(
-          [message.sender_id, message?.receiver_id],
-          'latestMessageIndividual',
-          latestMessagePayload,
+          [message.sender_id, message.receiver_id],
+          'newMessage',
+          payload,
         );
       }
     } catch (error) {
-      this.logger.error(
-        'Failed to emit new message event',
-        JSON.stringify(error),
-      );
+      this.logger.error('Failed to emit new message event', JSON.stringify(error));
     }
   }
 

@@ -12,6 +12,8 @@ export class MessageRepository implements IMessageRepository {
     private readonly messageRepository: Repository<Message>,
   ) {}
 
+  private static readonly MAX_PAGE_SIZE = 100;
+
   async findByConversation(
     senderId: number,
     receiverId?: number,
@@ -30,7 +32,7 @@ export class MessageRepository implements IMessageRepository {
 
     return this.messageRepository.find({
       where,
-      take: limit,
+      take: Math.min(limit, MessageRepository.MAX_PAGE_SIZE),
       skip: offset,
       order: { created_at: 'DESC' },
     });
@@ -67,7 +69,7 @@ export class MessageRepository implements IMessageRepository {
         conversation_id: Number(conversation_id),
       },
       relations: ['sender', 'receiver', 'group'],
-      take: limit,
+      take: Math.min(limit, MessageRepository.MAX_PAGE_SIZE),
       skip: offset,
       order: { created_at: 'DESC' },
       withDeleted: true,
@@ -159,32 +161,47 @@ export class MessageRepository implements IMessageRepository {
           '(message.sender_id = :userId OR message.receiver_id = :userId)',
           { userId },
         )
-        .andWhere('message.message ILIKE :query', { query: `%${query}%` })
+        .andWhere('message.message LIKE :query', { query: `%${query}%` })
         .andWhere('message.deleted_at IS NULL')
         .orderBy('message.created_at', 'DESC')
-        .limit(limit)
+        .limit(Math.min(limit, MessageRepository.MAX_PAGE_SIZE))
         .getMany();
-    } catch (error) {
+    } catch {
       return [];
     }
   }
 
-  async cleanupOldMessages(daysOld: number = 90): Promise<number> {
+  async cleanupOldMessages(daysOld: number = 90, batchSize = 500): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+
+    let totalDeleted = 0;
     try {
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+      // Select IDs in batches then delete — avoids long table locks on large tables
+      while (true) {
+        const batch = await this.messageRepository
+          .createQueryBuilder('message')
+          .select('message.id')
+          .where('message.deleted_at IS NOT NULL')
+          .andWhere('message.deleted_at < :cutoffDate', { cutoffDate })
+          .take(batchSize)
+          .getMany();
 
-      const result = await this.messageRepository
-        .createQueryBuilder()
-        .delete()
-        .from(Message)
-        .where('deleted_at IS NOT NULL')
-        .andWhere('deleted_at < :cutoffDate', { cutoffDate })
-        .execute();
+        if (!batch.length) break;
 
-      return result.affected || 0;
-    } catch (error) {
-      return 0;
+        await this.messageRepository
+          .createQueryBuilder()
+          .delete()
+          .from(Message)
+          .whereInIds(batch.map((m) => m.id))
+          .execute();
+
+        totalDeleted += batch.length;
+        if (batch.length < batchSize) break;
+      }
+    } catch {
+      // Return how many were deleted before the error
     }
+    return totalDeleted;
   }
 }

@@ -9,22 +9,23 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 @Injectable()
 export class ChatThrottlerGuard extends ThrottlerGuard {
   protected async getTracker(req: Record<string, any>): Promise<string> {
-    const schoolId = req.headers['x-school-id'];
-    const userId = req.headers['x-user-id'];
+    // x-app-id and x-app-user-id are validated by HmacAuthGuard before this
+    // runs, so they cannot be spoofed. Use them as the rate-limit key when present.
+    const appId = req.headers['x-app-id'];
+    const appUserId = req.headers['x-app-user-id'];
 
-    if (schoolId && userId) {
-      return `school_${schoolId}_user_${userId}`;
+    if (appId && appUserId) {
+      return `hmac:${appId}:${appUserId}`;
     }
 
-    const ip =
+    // Fallback: IP-based tracking (e.g. @Public() endpoints, health checks)
+    const ip: string =
       req.ip ||
-      req.connection?.remoteAddress ||
       req.socket?.remoteAddress ||
-      (req.connection as any)?.socket?.remoteAddress ||
-      req.headers['x-forwarded-for']?.split(',')[0].trim() ||
-      'unknown-ip';
+      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+      'unknown';
 
-    return `ip_${ip}`;
+    return `ip:${ip}`;
   }
 
   protected async throwThrottlingException(

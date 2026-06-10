@@ -58,13 +58,15 @@ export class CreateGroupUseCase {
       request.created_by,
       group_type,
     );
-    const users: CreateUserDto[] = allMembers.map((p, index) => ({
-      user_id: p.id,
-      school_id: request.school_id,
-      type: p.type,
-      image: p.image!,
-      name: p.name,
-    }));
+    const users: CreateUserDto[] = allMembers
+      .filter((p) => p.type !== undefined)
+      .map((p) => ({
+        user_id: p.id,
+        school_id: request.school_id,
+        type: p.type!,
+        image: p.image,
+        name: p.name,
+      }));
 
     const groupResponse = await this.groupService.createGroup({
       users,
